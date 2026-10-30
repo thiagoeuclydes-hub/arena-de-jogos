@@ -1,0 +1,6 @@
+{
+  "name": "ARENA DE JOGOS",
+  "description": "Uma plataforma de jogos educativos em tempo real para sala de aula.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

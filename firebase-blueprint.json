@@ -1,0 +1,79 @@
+{
+  "entities": {
+    "Room": {
+      "title": "Room",
+      "description": "Represents a game room managed by a professor.",
+      "type": "object",
+      "properties": {
+        "roomNumber": { "type": "string", "description": "SALA 1, SALA 2, etc." },
+        "password": { "type": "string", "maxLength": 4 },
+        "activeGame": { "type": "string", "enum": ["none", "colors", "vf", "quiz", "hangman", "stop"] },
+        "gameState": { "type": "string", "enum": ["waiting", "question_released", "answer_revealed", "finished"] },
+        "currentQuestionId": { "type": "string" },
+        "activeThemeId": { "type": "string" },
+        "forbiddenColor": { "type": "string" },
+        "activeLetter": { "type": "string", "maxLength": 1 },
+        "timer": { "type": "number" },
+        "lastUpdate": { "type": "string", "format": "date-time" }
+      },
+      "required": ["roomNumber", "password", "activeGame", "gameState"]
+    },
+    "Participant": {
+      "title": "Participant",
+      "description": "A student or team member in a room.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string", "maxLength": 50 },
+        "team": { "type": "string", "maxLength": 50 },
+        "points": { "type": "number" },
+        "lastAnswer": { "type": "string" },
+        "lastAnswerTime": { "type": "number" },
+        "isOnline": { "type": "boolean" }
+      },
+      "required": ["uid", "name", "points"]
+    },
+    "Theme": {
+      "title": "Theme",
+      "description": "A set of questions for a specific game type.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["vf", "quiz"] },
+        "questions": { "type": "array" }
+      },
+      "required": ["name", "type"]
+    },
+    "HangmanWord": {
+      "title": "HangmanWord",
+      "description": "A word for the hangman game.",
+      "type": "object",
+      "properties": {
+        "word": { "type": "string" },
+        "category": { "type": "string" },
+        "hint1": { "type": "string" },
+        "hint2": { "type": "string" },
+        "hintExtra": { "type": "string" }
+      },
+      "required": ["word", "category"]
+    }
+  },
+  "firestore": {
+    "/rooms/{roomId}": {
+      "schema": "Room",
+      "description": "Main game room collection."
+    },
+    "/rooms/{roomId}/participants/{participantId}": {
+      "schema": "Participant",
+      "description": "Students in the room."
+    },
+    "/themes/{themeId}": {
+      "schema": "Theme",
+      "description": "Question themes for Quiz and True/False."
+    },
+    "/hangmanWords/{wordId}": {
+      "schema": "HangmanWord",
+      "description": "Words for the Hangman game."
+    }
+  }
+}
