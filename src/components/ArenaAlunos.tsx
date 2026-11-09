@@ -54,7 +54,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
   });
 
   // Game state
-  const [activeGame, setActiveGame] = useState<'quiz' | 'forca' | 'verdadeiro_falso' | 'jogo_das_cores'>('quiz');
+  const [activeGame, setActiveGame] = useState<'quiz' | 'forca' | 'verdadeiro_falso' | 'jogo_das_cores' | 'stop_adedonha'>('quiz');
   const [score, setScore] = useState(0);
   const [questionIdx, setQuestionIdx] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
@@ -572,6 +572,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                       {selectedSala.jogoAtivo === 'quiz' && '🧠 Quiz de Conhecimentos'}
                       {selectedSala.jogoAtivo === 'verdadeiro_falso' && '⚖️ Verdadeiro ou Falso'}
                       {selectedSala.jogoAtivo === 'forca' && '🔤 Jogo da Forca'}
+                      {selectedSala.jogoAtivo === 'stop_adedonha' && '🚧 Stop / Adedonha (Em Construção)'}
                     </p>
                   </div>
 
@@ -688,7 +689,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                           const correct = idx === QUIZ_QUESTIONS[questionIdx].correctIndex;
                           setAnsweredResult(correct);
                           if (correct) {
-                            addScorePoints(500);
+                            addScorePoints(10);
                             confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
                           }
                         }}
@@ -702,7 +703,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                   {answeredResult !== null && (
                     <div className="space-y-4">
                       <div className={`p-3 rounded-2xl font-bold text-sm ${answeredResult ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}>
-                        {answeredResult ? 'Correto! +500 pts' : 'Incorreto!'}
+                        {answeredResult ? 'Correto! +10 pts' : 'Incorreto!'}
                       </div>
                       <button
                         onClick={() => {
@@ -747,7 +748,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                           const correct = item.val === VF_QUESTIONS[questionIdx].isTrue;
                           setAnsweredResult(correct);
                           if (correct) {
-                            addScorePoints(400);
+                            addScorePoints(10);
                             confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
                           }
                         }}
@@ -761,7 +762,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                   {answeredResult !== null && (
                     <div className="space-y-4">
                       <div className={`p-3 rounded-2xl font-bold text-sm ${answeredResult ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}>
-                        {answeredResult ? 'Resposta Certa! +400 pts' : 'Resposta Errada!'}
+                        {answeredResult ? 'Resposta Certa! +10 pts' : 'Resposta Errada!'}
                       </div>
                       <button
                         onClick={() => {
@@ -801,10 +802,16 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                           key={letter}
                           disabled={guessed}
                           onClick={() => {
-                            setGuessedLetters([...guessedLetters, letter]);
-                            if (FORCA_WORDS[forcaIdx].word.includes(letter)) {
-                              addScorePoints(200);
-                              confetti({ particleCount: 30, spread: 40 });
+                            const newGuessed = [...guessedLetters, letter];
+                            setGuessedLetters(newGuessed);
+                            const currentWord = FORCA_WORDS[forcaIdx].word;
+                            const isCorrectLetter = currentWord.includes(letter);
+                            if (isCorrectLetter) {
+                              const wordCompleted = currentWord.split('').every((char: string) => newGuessed.includes(char));
+                              if (wordCompleted) {
+                                addScorePoints(15);
+                                confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+                              }
                             }
                           }}
                           className={`p-3 rounded-xl border font-bold text-sm ${guessed ? 'bg-slate-900 border-slate-800 text-slate-600' : 'bg-slate-950 border-cyan-700 text-white hover:bg-cyan-900'}`}
@@ -828,6 +835,24 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                     className="px-6 py-3 bg-amber-400 text-slate-950 font-black rounded-xl text-sm"
                   >
                     Próxima Palavra ➔
+                  </button>
+                </div>
+              )}
+
+              {/* STOP / ADEDONHA GAME (EM CONSTRUÇÃO) */}
+              {activeGame === 'stop_adedonha' && (
+                <div className="space-y-6 py-12 text-center">
+                  <div className="inline-block bg-slate-700/30 border border-slate-500 text-slate-300 text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-widest">
+                    Stop / Adedonha &bull; Em Construção
+                  </div>
+                  <h3 className="text-2xl font-black text-white">
+                    🚧 Este jogo está em construção e estará disponível em breve!
+                  </h3>
+                  <button
+                    onClick={() => setStep('arena_hub')}
+                    className="px-6 py-3 bg-amber-400 text-slate-950 font-black rounded-xl text-sm"
+                  >
+                    ← Voltar aos Jogos
                   </button>
                 </div>
               )}

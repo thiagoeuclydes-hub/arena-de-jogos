@@ -119,13 +119,12 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
       alert('ID da sala inválido.');
       return;
     }
-    if (window.confirm(`Deseja realmente apagar a sala "${nomeSala || 'Sem Nome'}"?`)) {
-      try {
-        await deleteDoc(doc(db as any, 'salas', id));
-      } catch (err: any) {
-        console.error("Erro ao apagar sala:", err);
-        alert('Erro ao apagar sala: ' + (err?.message || err));
-      }
+    try {
+      await deleteDoc(doc(db as any, 'salas', id));
+      alert(`Sala "${nomeSala || 'Sem Nome'}" apagada com sucesso!`);
+    } catch (err: any) {
+      console.error("Erro ao apagar sala:", err);
+      alert('Erro ao apagar sala: ' + (err?.message || err));
     }
   };
 
@@ -185,25 +184,25 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
 
   const handleLiberarTodas = async (salaId: string) => {
     if (!db) return;
-    if (window.confirm('Deseja liberar todas as cadeiras desta sala?')) {
-      try {
-        const sala = salas.find(s => s.id === salaId);
-        if (!sala) return;
+    try {
+      const sala = salas.find(s => s.id === salaId);
+      if (!sala) return;
 
-        const updatedCadeiras = sala.cadeiras.map((c: any) => ({
-          id: c.id,
-          ocupada: false,
-          nomeAluno: '',
-          avatar: '',
-          score: 0
-        }));
+      const updatedCadeiras = sala.cadeiras.map((c: any) => ({
+        id: c.id,
+        ocupada: false,
+        nomeAluno: '',
+        avatar: '',
+        score: 0
+      }));
 
-        await updateDoc(doc(db as any, 'salas', salaId), {
-          cadeiras: updatedCadeiras
-        });
-      } catch (err) {
-        console.error("Erro ao liberar todas as cadeiras:", err);
-      }
+      await updateDoc(doc(db as any, 'salas', salaId), {
+        cadeiras: updatedCadeiras
+      });
+      alert('Todas as cadeiras foram limpas com sucesso!');
+    } catch (err: any) {
+      console.error("Erro ao liberar todas as cadeiras:", err);
+      alert('Erro ao limpar cadeiras: ' + (err?.message || err));
     }
   };
 
@@ -340,6 +339,7 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                         <option value="forca">Forca</option>
                         <option value="verdadeiro_falso">Verdadeiro ou Falso</option>
                         <option value="jogo_das_cores">Jogo das Cores</option>
+                        <option value="stop_adedonha">Stop / Adedonha (Em Construção)</option>
                       </select>
                     </div>
 
