@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Key, Armchair, RefreshCw, CheckCircle2, LogOut, Gamepad2, Lock, Unlock, Trophy, XCircle } from 'lucide-react';
-import { collection, doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, getDoc, updateDoc, onSnapshot, runTransaction } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '../firebase';
 import confetti from 'canvas-confetti';
 
@@ -81,15 +81,24 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
         setSalas(list);
         setLoading(false);
 
-        // Restore active sala if in session
+        // Check session and chair occupancy (expulsion check)
         const savedSalaId = sessionStorage.getItem('arena_my_sala');
         const savedChairId = sessionStorage.getItem('arena_my_chair');
         if (savedSalaId && savedChairId) {
           const found = list.find(s => s.id === savedSalaId);
           if (found) {
-            setSelectedSala(found);
             const chair = found.cadeiras?.find((c: any) => c.id === Number(savedChairId));
-            if (chair && chair.ocupada) {
+            if (!chair || !chair.ocupada) {
+              sessionStorage.removeItem('arena_my_sala');
+              sessionStorage.removeItem('arena_my_chair');
+              setMySalaId(null);
+              setMyChairId(null);
+              setScore(0);
+              setSelectedSala(found);
+              setStep('grid');
+              alert('Você foi liberado da cadeira pelo professor.');
+            } else {
+              setSelectedSala(found);
               setMySalaId(savedSalaId);
               setMyChairId(Number(savedChairId));
               setNome(chair.nomeAluno || '');
@@ -105,7 +114,15 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
             setSelectedSala(foundCurrent);
             if (myChairId) {
               const myChair = foundCurrent.cadeiras?.find((c: any) => c.id === myChairId);
-              if (myChair && typeof myChair.score === 'number') {
+              if (!myChair || !myChair.ocupada) {
+                sessionStorage.removeItem('arena_my_sala');
+                sessionStorage.removeItem('arena_my_chair');
+                setMySalaId(null);
+                setMyChairId(null);
+                setScore(0);
+                setStep('grid');
+                alert('Você foi liberado da cadeira pelo professor.');
+              } else if (myChair && typeof myChair.score === 'number') {
                 setScore(myChair.score);
               }
             }
@@ -236,20 +253,21 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
     setScore(newScore);
     if (!mySalaId || !myChairId || !db) return;
     try {
-      const salaRef = doc(db as any, 'salas', mySalaId);
-      const docSnap = await getDoc(salaRef);
-      if (docSnap.exists()) {
-        const salaData = docSnap.data();
-        const updatedCadeiras = salaData.cadeiras.map((c: any) => {
+      await runTransaction(db as any, async (transaction: any) => {
+        const salaRef = doc(db as any, 'salas', mySalaId);
+        const salaDoc = await transaction.get(salaRef);
+        if (!salaDoc.exists()) return;
+        const salaData = salaDoc.data();
+        const updatedCadeiras = (salaData.cadeiras || []).map((c: any) => {
           if (c.id === myChairId) {
             return { ...c, score: newScore };
           }
           return c;
         });
-        await updateDoc(salaRef, { cadeiras: updatedCadeiras });
-      }
+        transaction.update(salaRef, { cadeiras: updatedCadeiras });
+      });
     } catch (err) {
-      console.error("Erro ao atualizar placar:", err);
+      console.error("Erro ao atualizar placar em transação:", err);
     }
   };
 

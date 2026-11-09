@@ -384,26 +384,41 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                     </div>
                   )}
 
-                  <div className="flex items-center space-x-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
-                      onClick={() => handleLiberarTodas(sala.id)}
-                      className="px-4 py-2.5 rounded-xl bg-emerald-600/20 border border-emerald-500/40 hover:bg-emerald-600/30 text-emerald-300 font-bold text-xs transition"
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleLiberarTodas(sala.id);
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-cyan-600/30 border border-cyan-500/50 hover:bg-cyan-600/50 text-cyan-200 font-bold text-xs transition flex items-center space-x-1"
                     >
-                      Liberar Cadeiras
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Limpar Cadeiras</span>
                     </button>
                     <button
-                      onClick={() => handleOpenEdit(sala)}
-                      className="p-2.5 rounded-xl bg-emerald-600/20 border border-emerald-500/40 hover:bg-emerald-600/30 text-emerald-300 transition"
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenEdit(sala);
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-blue-600/30 border border-blue-500/50 hover:bg-blue-600/50 text-blue-200 font-bold text-xs transition flex items-center space-x-1"
                       title="Editar Sala"
                     >
-                      <Edit3 className="w-4 h-4" />
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>Editar</span>
                     </button>
                     <button
-                      onClick={() => handleDeleteSala(sala.id, sala.nome)}
-                      className="p-2.5 rounded-xl bg-red-600/20 border border-red-500/40 hover:bg-red-600/30 text-red-300 transition"
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteSala(sala.id, sala.nome);
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-red-600/30 border border-red-500/50 hover:bg-red-600/50 text-red-200 font-bold text-xs transition flex items-center space-x-1"
                       title="Apagar Sala"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Apagar</span>
                     </button>
                   </div>
                 </div>
