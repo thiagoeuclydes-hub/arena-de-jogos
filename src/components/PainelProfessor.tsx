@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit3, Armchair, ArrowLeft, RefreshCw, LogOut, CheckCircle2 } from 'lucide-react';
+import { Plus, Trash2, Edit3, Armchair, ArrowLeft, RefreshCw, LogOut, CheckCircle2, Play, Lock, Unlock, Gamepad2 } from 'lucide-react';
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '../firebase';
 
@@ -68,14 +68,13 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
 
     try {
       if (editingId) {
-        // Edit existing room without erasing existing seated students
         const salaRef = doc(db as any, 'salas', editingId);
         const existingSala = salas.find(s => s.id === editingId);
         const oldCadeiras = existingSala?.cadeiras || [];
         
         const newCadeiras = Array.from({ length: Number(numCadeiras) }, (_, i) => {
           if (oldCadeiras[i]) {
-            return oldCadeiras[i]; // keep existing chair state & student
+            return oldCadeiras[i];
           }
           return { id: i + 1, ocupada: false, nomeAluno: '', avatar: '' };
         });
@@ -86,7 +85,6 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
           cadeiras: newCadeiras
         });
       } else {
-        // Create new room with N free chairs
         const cadeiras = Array.from({ length: Number(numCadeiras) }, (_, i) => ({
           id: i + 1,
           ocupada: false,
@@ -98,6 +96,8 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
           nome: nome.trim(),
           pin: pin.trim() || '1234',
           cadeiras,
+          jogoLiberado: false,
+          jogoAtivo: 'quiz',
           criadoEm: serverTimestamp()
         });
       }
@@ -118,6 +118,28 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
         console.error("Erro ao apagar sala:", err);
         alert('Erro ao apagar sala.');
       }
+    }
+  };
+
+  const handleToggleLiberarJogos = async (salaId: string, currentState: boolean) => {
+    if (!db) return;
+    try {
+      await updateDoc(doc(db as any, 'salas', salaId), {
+        jogoLiberado: !currentState
+      });
+    } catch (err) {
+      console.error("Erro ao alterar liberação de jogos:", err);
+    }
+  };
+
+  const handleChangeJogoAtivo = async (salaId: string, novoJogo: string) => {
+    if (!db) return;
+    try {
+      await updateDoc(doc(db as any, 'salas', salaId), {
+        jogoAtivo: novoJogo
+      });
+    } catch (err) {
+      console.error("Erro ao alterar jogo ativo:", err);
     }
   };
 
@@ -183,7 +205,7 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#07262c] border border-cyan-500/30 p-6 rounded-3xl shadow-xl">
         <div>
           <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Painel Administrativo do Professor</span>
-          <h2 className="text-3xl font-black text-white mt-1">Gerenciamento de Salas e Cadeiras</h2>
+          <h2 className="text-3xl font-black text-white mt-1">Gerenciamento de Salas e Arena</h2>
         </div>
         <div className="flex items-center space-x-3">
           <button
@@ -217,12 +239,14 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
             const cadeiras = sala.cadeiras || [];
             const ocupadas = cadeiras.filter((c: any) => c.ocupada).length;
             const total = cadeiras.length;
+            const jogoLiberado = sala.jogoLiberado === true;
+            const jogoAtivo = sala.jogoAtivo || 'quiz';
 
             return (
               <div key={sala.id} className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 md:p-8 shadow-xl space-y-6">
                 
-                {/* Sala Info & Actions */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-cyan-900/60">
+                {/* Sala Info & Controls */}
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-cyan-900/60">
                   <div>
                     <div className="flex items-center space-x-3 mb-1">
                       <h3 className="text-2xl font-black text-white">{sala.nome}</h3>
@@ -230,17 +254,41 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                         PIN: {sala.pin || '1234'}
                       </span>
                     </div>
-                    <p className="text-xs text-cyan-300/80 font-bold">
-                      Status: <strong className="text-amber-400">{ocupadas} de {total} cadeiras ocupadas</strong>
+                    <p className="text-xs text-cyan-300/80 font-bold mt-1">
+                      Ocupação: <strong className="text-amber-400">{ocupadas} de {total} cadeiras</strong>
                     </p>
+                  </div>
+
+                  {/* PROFESSOR GAME RELEASE CONTROLS */}
+                  <div className="flex flex-wrap items-center gap-3 bg-slate-950/80 p-4 rounded-2xl border border-cyan-900/60">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs font-bold text-cyan-300">Jogo Ativo:</span>
+                      <select
+                        value={jogoAtivo}
+                        onChange={(e) => handleChangeJogoAtivo(sala.id, e.target.value)}
+                        className="bg-[#07262c] border border-cyan-500/40 rounded-xl px-3 py-1.5 text-xs text-white font-bold focus:outline-none"
+                      >
+                        <option value="quiz">Quiz</option>
+                        <option value="forca">Forca</option>
+                        <option value="verdadeiro_falso">Verdadeiro ou Falso</option>
+                      </select>
+                    </div>
+
+                    <button
+                      onClick={() => handleToggleLiberarJogos(sala.id, jogoLiberado)}
+                      className={`px-5 py-2.5 rounded-xl font-black text-xs shadow-lg transition flex items-center space-x-2 ${jogoLiberado ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950' : 'bg-amber-400 hover:bg-amber-300 text-slate-950'}`}
+                    >
+                      {jogoLiberado ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                      <span>{jogoLiberado ? 'Jogos Liberados (Bloquear)' : 'Liberar Jogos para Alunos'}</span>
+                    </button>
                   </div>
 
                   <div className="flex items-center space-x-2">
                     <button
                       onClick={() => handleLiberarTodas(sala.id)}
-                      className="px-4 py-2 rounded-xl bg-cyan-600/20 border border-cyan-500/40 hover:bg-cyan-600/30 text-cyan-300 font-bold text-xs transition"
+                      className="px-4 py-2.5 rounded-xl bg-cyan-600/20 border border-cyan-500/40 hover:bg-cyan-600/30 text-cyan-300 font-bold text-xs transition"
                     >
-                      Liberar Todas
+                      Liberar Cadeiras
                     </button>
                     <button
                       onClick={() => handleOpenEdit(sala)}
@@ -342,7 +390,6 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                   onChange={(e) => setNumCadeiras(Number(e.target.value))}
                   className="w-full bg-slate-950 border border-cyan-500/40 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-amber-400 font-semibold"
                 />
-                <p className="text-[10px] text-cyan-300/60 mt-1">Ao aumentar a quantidade, novas cadeiras livres serão adicionadas. Alunos já sentados são mantidos.</p>
               </div>
 
               <div className="flex space-x-3 pt-2">

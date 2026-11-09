@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Key, Armchair, RefreshCw, CheckCircle2, LogOut } from 'lucide-react';
+import { ArrowLeft, Key, Armchair, RefreshCw, CheckCircle2, LogOut, Gamepad2, Lock, Unlock, Trophy, XCircle } from 'lucide-react';
 import { collection, doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '../firebase';
 import confetti from 'canvas-confetti';
@@ -10,13 +10,32 @@ interface ArenaAlunosProps {
 
 const AVATARS = ['🦊', '🐼', '🦁', '🐯', '🐸', '🐵', '🦄', '🐲', '🤖', '👾', '🚀', '⚽'];
 
+// Sample questions for the 3 games
+const QUIZ_QUESTIONS = [
+  { question: "Qual é o maior país do mundo em território?", options: ["Canadá", "China", "Rússia", "Estados Unidos"], correctIndex: 2 },
+  { question: "Em qual continente fica o Deserto do Saara?", options: ["Ásia", "África", "Oceania", "América do Sul"], correctIndex: 1 },
+  { question: "Qual a fórmula química da água?", options: ["H2O", "CO2", "NaCl", "O2"], correctIndex: 0 }
+];
+
+const VF_QUESTIONS = [
+  { statement: "A Terra é redonda (formato geoide).", isTrue: true },
+  { statement: "O Sol gira em torno da Terra.", isTrue: false },
+  { statement: "A água ferve a 100°C ao nível do mar.", isTrue: true }
+];
+
+const FORCA_WORDS = [
+  { word: "GEOGRAFIA", hint: "Estudo da Terra e mapas" },
+  { word: "CIENCIAS", hint: "Estudo da natureza e experimentos" },
+  { word: "PLANETA", hint: "Corpo celeste que orbita uma estrela" }
+];
+
 export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
   const [salas, setSalas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSala, setSelectedSala] = useState<any>(null);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
-  const [step, setStep] = useState<'list' | 'pin' | 'profile' | 'grid' | 'seated'>('list');
+  const [step, setStep] = useState<'list' | 'pin' | 'profile' | 'grid' | 'arena_hub' | 'play_game'>('list');
 
   const [nome, setNome] = useState('');
   const [avatar, setAvatar] = useState('🦁');
@@ -34,6 +53,17 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
     return null;
   });
 
+  // Game state
+  const [activeGame, setActiveGame] = useState<'quiz' | 'forca' | 'verdadeiro_falso'>('quiz');
+  const [score, setScore] = useState(0);
+  const [questionIdx, setQuestionIdx] = useState(0);
+  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [answeredResult, setAnsweredResult] = useState<boolean | null>(null);
+
+  // Forca game state
+  const [forcaIdx, setForcaIdx] = useState(0);
+  const [guessedLetters, setGuessedLetters] = useState<string[]>([]);
+
   useEffect(() => {
     if (!isFirebaseConfigured || !db) {
       setLoading(false);
@@ -50,7 +80,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
         setSalas(list);
         setLoading(false);
 
-        // If sessionStorage had seated state, restore active sala & step
+        // Restore active sala if in session
         const savedSalaId = sessionStorage.getItem('arena_my_sala');
         const savedChairId = sessionStorage.getItem('arena_my_chair');
         if (savedSalaId && savedChairId) {
@@ -63,7 +93,6 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
               setMyChairId(Number(savedChairId));
               setNome(chair.nomeAluno || '');
               setAvatar(chair.avatar || '🦁');
-              setStep('seated');
             }
           }
         }
@@ -108,8 +137,6 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
 
     try {
       const salaRef = doc(db, 'salas', selectedSala.id);
-      
-      // Fetch latest document to verify real-time availability
       const docSnap = await getDoc(salaRef);
       if (!docSnap.exists()) {
         alert('Esta sala não existe mais.');
@@ -147,7 +174,9 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
       sessionStorage.setItem('arena_my_chair', String(chairId));
       setMySalaId(selectedSala.id);
       setMyChairId(chairId);
-      setStep('seated');
+
+      // REDIRECIONADO À ARENA DE JOGOS APÓS CLICAR NA CADEIRA
+      setStep('arena_hub');
       confetti({ particleCount: 70, spread: 80, origin: { y: 0.6 } });
     } catch (err) {
       console.error("Erro ao ocupar cadeira:", err);
@@ -196,6 +225,8 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
       </div>
     );
   }
+
+  const jogoLiberado = selectedSala?.jogoLiberado === true;
 
   return (
     <div className="flex-1 flex flex-col w-full max-w-5xl mx-auto py-8 px-4 space-y-6">
@@ -365,8 +396,8 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
             </div>
           )}
 
-          {/* STEP 4 & 6 & 7: CHAIR GRID (VERDE = LIVRE, VERMELHO = OCUPADA) */}
-          {(step === 'grid' || step === 'seated') && selectedSala && (
+          {/* STEP 4: CHAIR GRID (AO CLICAR NA CADEIRA -> REDIRECIONADO À ARENA DE JOGOS) */}
+          {step === 'grid' && selectedSala && (
             <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 md:p-8 shadow-xl space-y-6">
               
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-cyan-900/60">
@@ -377,49 +408,40 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                   </p>
                 </div>
 
-                {step === 'seated' && (
-                  <button
-                    onClick={handleLeaveChair}
-                    className="px-6 py-3 rounded-2xl bg-red-600 hover:bg-red-500 text-white font-black text-xs shadow-lg transition flex items-center space-x-2"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    <span>Sair da Minha Cadeira</span>
-                  </button>
-                )}
+                <button
+                  onClick={() => setStep('list')}
+                  className="px-4 py-2 rounded-xl bg-slate-950 border border-cyan-500/30 text-cyan-300 font-bold text-xs"
+                >
+                  ← Trocar de Sala
+                </button>
               </div>
 
               <div>
                 <p className="text-xs font-bold text-cyan-300 mb-4">
-                  {step === 'seated' 
-                    ? '✨ Você está sentado! Sua cadeira está destacada em amarelo abaixo.' 
-                    : '👉 Clique em uma cadeira livre (Verde) para sentar-se:'}
+                  👉 Clique em uma cadeira livre (Verde) para sentar-se e ir para a <strong>Arena de Jogos</strong>:
                 </p>
 
-                {/* Real-time sync grid */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-10 gap-3">
                   {selectedSala.cadeiras?.map((c: any) => {
-                    const isMyChair = step === 'seated' && c.id === myChairId;
                     const ocupada = c.ocupada;
 
                     return (
                       <button
                         key={c.id}
-                        disabled={step === 'seated'}
                         onClick={() => handleChooseChair(c.id)}
-                        className={`p-3 rounded-2xl border flex flex-col items-center justify-center text-center space-y-1.5 transition ${isMyChair ? 'bg-amber-400 border-yellow-200 text-slate-950 ring-4 ring-amber-300 scale-105 shadow-xl' : ocupada ? 'bg-red-950/90 border-red-500 text-red-200 cursor-not-allowed opacity-90' : 'bg-slate-950 border-cyan-800/80 hover:bg-emerald-950 hover:border-emerald-400 text-cyan-200 shadow-md'}`}
+                        className={`p-3 rounded-2xl border flex flex-col items-center justify-center text-center space-y-1.5 transition ${ocupada ? 'bg-red-950/90 border-red-500 text-red-200 cursor-not-allowed opacity-90' : 'bg-slate-950 border-cyan-800/80 hover:bg-emerald-950 hover:border-emerald-400 text-cyan-200 shadow-md'}`}
                       >
                         <div className="flex items-center space-x-1">
-                          <Armchair className={`w-4 h-4 ${isMyChair ? 'text-slate-950' : ocupada ? 'text-red-400' : 'text-emerald-400'}`} />
+                          <Armchair className={`w-4 h-4 ${ocupada ? 'text-red-400' : 'text-emerald-400'}`} />
                           <span className="text-xs font-black">#{c.id}</span>
                         </div>
 
                         {ocupada ? (
                           <div className="w-full space-y-0.5">
                             <span className="text-base block">{c.avatar || '🦁'}</span>
-                            <span className={`text-[10px] font-black truncate block max-w-full ${isMyChair ? 'text-slate-950' : 'text-amber-300'}`}>
+                            <span className="text-[10px] font-black truncate block text-amber-300 max-w-full">
                               {c.nomeAluno}
                             </span>
-                            {isMyChair && <span className="text-[9px] uppercase font-black bg-slate-950 text-amber-400 px-1.5 py-0.5 rounded">Sua Cadeira</span>}
                           </div>
                         ) : (
                           <span className="text-[10px] text-emerald-400 font-bold py-1">Livre</span>
@@ -430,23 +452,275 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-cyan-900/50 flex justify-between items-center text-xs text-cyan-300/70">
-                <button
-                  onClick={() => {
-                    if (step === 'seated') {
-                      if (confirm('Deseja realmente sair da sala? Sua cadeira será liberada.')) {
-                        handleLeaveChair();
-                        setStep('list');
-                      }
-                    } else {
-                      setStep('list');
-                    }
-                  }}
-                  className="px-4 py-2 rounded-xl bg-slate-950 border border-cyan-500/30 hover:bg-slate-900 font-bold"
-                >
-                  ← Voltar para Lista de Salas
-                </button>
+            </div>
+          )}
+
+          {/* STEP 5: ARENA DE JOGOS HUB (EXIGE LIBERAÇÃO DO PROFESSOR) */}
+          {step === 'arena_hub' && selectedSala && (
+            <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 md:p-8 shadow-xl space-y-8">
+              
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-cyan-900/60">
+                <div className="flex items-center space-x-4">
+                  <div className="w-16 h-16 rounded-2xl bg-amber-400 flex items-center justify-center text-3xl shadow-lg">
+                    {avatar}
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-black text-white">{nome}</h3>
+                    <p className="text-xs text-amber-400 font-bold">
+                      {selectedSala.nome} &bull; Cadeira #{((myChairId ?? 0))}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  <div className="text-right">
+                    <span className="text-xs uppercase text-cyan-300 font-bold block">Pontuação</span>
+                    <span className="text-2xl font-black text-amber-400">{score} pts</span>
+                  </div>
+                  <button
+                    onClick={handleLeaveChair}
+                    className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs"
+                    title="Sair da Cadeira"
+                  >
+                    <LogOut className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
+
+              {/* PROFESSOR RELEASE GATE */}
+              {!jogoLiberado ? (
+                <div className="bg-slate-950 border border-amber-500/40 rounded-3xl p-12 text-center space-y-6 shadow-2xl">
+                  <div className="w-20 h-20 rounded-full bg-amber-400/20 border-2 border-amber-400 flex items-center justify-center mx-auto text-amber-400 animate-pulse">
+                    <Lock className="w-10 h-10" />
+                  </div>
+                  <div className="space-y-2 max-w-md mx-auto">
+                    <h4 className="text-2xl font-black text-white">Cadeira Garantida!</h4>
+                    <p className="text-sm text-cyan-300/80">
+                      Aguardando o professor liberar os jogos na Arena... Assim que liberados, os jogos abaixo aparecerão para você!
+                    </p>
+                  </div>
+                  <div className="inline-block px-6 py-2 rounded-full bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs font-bold animate-bounce">
+                    ⏳ Conectado ao Painel do Professor
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="flex items-center space-x-2 bg-emerald-500/20 border border-emerald-500/40 p-4 rounded-2xl text-emerald-300 font-bold text-sm">
+                    <Unlock className="w-5 h-5 text-emerald-400" />
+                    <span>🎉 O Professor liberou a Arena de Jogos! Escolha um jogo abaixo para começar:</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {[
+                      { id: 'quiz', title: 'Quiz', desc: 'Múltipla escolha de conhecimentos', color: 'from-blue-600 to-cyan-600' },
+                      { id: 'verdadeiro_falso', title: 'Verdadeiro ou Falso', desc: 'Afirmações rápidas', color: 'from-emerald-600 to-teal-600' },
+                      { id: 'forca', title: 'Forca', desc: 'Adivinhe a palavra secreta', color: 'from-amber-600 to-yellow-600' }
+                    ].map((g) => (
+                      <div
+                        key={g.id}
+                        onClick={() => {
+                          setActiveGame(g.id as any);
+                          setStep('play_game');
+                          setQuestionIdx(0);
+                          setSelectedAnswer(null);
+                          setAnsweredResult(null);
+                        }}
+                        className={`bg-gradient-to-br ${g.color} border border-white/20 p-6 rounded-3xl cursor-pointer shadow-xl transition transform hover:scale-105 flex flex-col justify-between`}
+                      >
+                        <div>
+                          <h4 className="text-xl font-black text-white mb-2">{g.title}</h4>
+                          <p className="text-xs text-white/80">{g.desc}</p>
+                        </div>
+                        <div className="mt-6 inline-flex items-center space-x-2 text-white font-black text-sm">
+                          <span>Jogar Agora ➔</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+            </div>
+          )}
+
+          {/* STEP 6: PLAY ACTIVE GAME (QUIZ, FORCA, V/F) */}
+          {step === 'play_game' && selectedSala && (
+            <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 md:p-8 shadow-xl space-y-6 max-w-2xl mx-auto w-full text-center">
+              
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => setStep('arena_hub')}
+                  className="px-4 py-2 rounded-xl bg-slate-950 border border-cyan-500/30 text-cyan-300 font-bold text-xs"
+                >
+                  ← Voltar aos Jogos
+                </button>
+                <span className="text-amber-400 font-black">{score} pts</span>
+              </div>
+
+              {/* QUIZ GAME */}
+              {activeGame === 'quiz' && (
+                <div className="space-y-6">
+                  <div className="inline-block bg-blue-600/30 border border-blue-400 text-blue-300 text-xs font-bold px-3 py-1 rounded-full">
+                    Quiz &bull; Pergunta {questionIdx + 1} de {QUIZ_QUESTIONS.length}
+                  </div>
+
+                  <h3 className="text-2xl font-black text-white">
+                    {QUIZ_QUESTIONS[questionIdx].question}
+                  </h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {QUIZ_QUESTIONS[questionIdx].options.map((opt, idx) => (
+                      <button
+                        key={idx}
+                        disabled={answeredResult !== null}
+                        onClick={() => {
+                          setSelectedAnswer(idx);
+                          const correct = idx === QUIZ_QUESTIONS[questionIdx].correctIndex;
+                          setAnsweredResult(correct);
+                          if (correct) {
+                            setScore(s => s + 500);
+                            confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
+                          }
+                        }}
+                        className={`p-5 rounded-2xl border-2 font-bold text-white transition ${selectedAnswer === idx ? (answeredResult ? 'bg-emerald-600 border-emerald-400' : 'bg-red-600 border-red-400') : 'bg-slate-950 border-cyan-800 hover:bg-cyan-950'}`}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+
+                  {answeredResult !== null && (
+                    <div className="space-y-4">
+                      <div className={`p-3 rounded-2xl font-bold text-sm ${answeredResult ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}>
+                        {answeredResult ? 'Correto! +500 pts' : 'Incorreto!'}
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (questionIdx + 1 < QUIZ_QUESTIONS.length) {
+                            setQuestionIdx(q => q + 1);
+                            setSelectedAnswer(null);
+                            setAnsweredResult(null);
+                          } else {
+                            alert('Parabéns! Você concluiu o Quiz!');
+                            setStep('arena_hub');
+                          }
+                        }}
+                        className="px-6 py-3 bg-amber-400 text-slate-950 font-black rounded-xl text-sm"
+                      >
+                        Próxima Pergunta ➔
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* VERDADEIRO OU FALSO GAME */}
+              {activeGame === 'verdadeiro_falso' && (
+                <div className="space-y-6">
+                  <div className="inline-block bg-emerald-600/30 border border-emerald-400 text-emerald-300 text-xs font-bold px-3 py-1 rounded-full">
+                    Verdadeiro ou Falso &bull; Afirmação {questionIdx + 1} de {VF_QUESTIONS.length}
+                  </div>
+
+                  <h3 className="text-2xl font-black text-white">
+                    "{VF_QUESTIONS[questionIdx].statement}"
+                  </h3>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    {[
+                      { label: 'Verdadeiro', val: true },
+                      { label: 'Falso', val: false }
+                    ].map((item, idx) => (
+                      <button
+                        key={idx}
+                        disabled={answeredResult !== null}
+                        onClick={() => {
+                          const correct = item.val === VF_QUESTIONS[questionIdx].isTrue;
+                          setAnsweredResult(correct);
+                          if (correct) {
+                            setScore(s => s + 400);
+                            confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
+                          }
+                        }}
+                        className="p-6 rounded-2xl border-2 font-bold text-lg bg-slate-950 border-cyan-800 hover:bg-cyan-950 text-white"
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {answeredResult !== null && (
+                    <div className="space-y-4">
+                      <div className={`p-3 rounded-2xl font-bold text-sm ${answeredResult ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}>
+                        {answeredResult ? 'Resposta Certa! +400 pts' : 'Resposta Errada!'}
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (questionIdx + 1 < VF_QUESTIONS.length) {
+                            setQuestionIdx(q => q + 1);
+                            setAnsweredResult(null);
+                          } else {
+                            alert('Parabéns! Você concluiu Verdadeiro ou Falso!');
+                            setStep('arena_hub');
+                          }
+                        }}
+                        className="px-6 py-3 bg-amber-400 text-slate-950 font-black rounded-xl text-sm"
+                      >
+                        Próxima Afirmação ➔
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* FORCA GAME */}
+              {activeGame === 'forca' && (
+                <div className="space-y-6">
+                  <div className="inline-block bg-amber-600/30 border border-amber-400 text-amber-300 text-xs font-bold px-3 py-1 rounded-full">
+                    Jogo da Forca &bull; Dica: {FORCA_WORDS[forcaIdx].hint}
+                  </div>
+
+                  <div className="text-4xl font-mono tracking-widest text-amber-400 font-black my-4">
+                    {FORCA_WORDS[forcaIdx].word.split('').map(char => guessedLetters.includes(char) ? char : '_').join(' ')}
+                  </div>
+
+                  <div className="grid grid-cols-6 gap-2 max-w-md mx-auto">
+                    {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(letter => {
+                      const guessed = guessedLetters.includes(letter);
+                      return (
+                        <button
+                          key={letter}
+                          disabled={guessed}
+                          onClick={() => {
+                            setGuessedLetters([...guessedLetters, letter]);
+                            if (FORCA_WORDS[forcaIdx].word.includes(letter)) {
+                              setScore(s => s + 200);
+                              confetti({ particleCount: 30, spread: 40 });
+                            }
+                          }}
+                          className={`p-3 rounded-xl border font-bold text-sm ${guessed ? 'bg-slate-900 border-slate-800 text-slate-600' : 'bg-slate-950 border-cyan-700 text-white hover:bg-cyan-900'}`}
+                        >
+                          {letter}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      if (forcaIdx + 1 < FORCA_WORDS.length) {
+                        setForcaIdx(f => f + 1);
+                        setGuessedLetters([]);
+                      } else {
+                        alert('Parabéns! Você concluiu a Forca!');
+                        setStep('arena_hub');
+                      }
+                    }}
+                    className="px-6 py-3 bg-amber-400 text-slate-950 font-black rounded-xl text-sm"
+                  >
+                    Próxima Palavra ➔
+                  </button>
+                </div>
+              )}
 
             </div>
           )}
