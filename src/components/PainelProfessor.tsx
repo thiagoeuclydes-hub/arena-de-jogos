@@ -150,6 +150,20 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
     }
   };
 
+  const handleSetGameStatus = async (salaId: string, gameId: string, status: boolean) => {
+    if (!db) return;
+    try {
+      const sala = salas.find(s => s.id === salaId);
+      const currentStatus = sala?.jogosStatus || {};
+      await updateDoc(doc(db as any, 'salas', salaId), {
+        jogosStatus: { ...currentStatus, [gameId]: status },
+        jogoAtivo: gameId
+      });
+    } catch (err) {
+      console.error("Erro ao alterar status do jogo:", err);
+    }
+  };
+
   const handleSetCorProibida = async (salaId: string, cor: string) => {
     if (!db) return;
     try {
@@ -326,30 +340,56 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                     </p>
                   </div>
 
-                  {/* PROFESSOR GAME RELEASE CONTROLS */}
-                  <div className="flex flex-wrap items-center gap-3 bg-slate-950/80 p-4 rounded-2xl border border-emerald-900/60">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs font-bold text-emerald-300">Jogo Ativo:</span>
-                      <select
-                        value={jogoAtivo}
-                        onChange={(e) => handleChangeJogoAtivo(sala.id, e.target.value)}
-                        className="bg-[#052c1e] border border-emerald-500/40 rounded-xl px-3 py-1.5 text-xs text-white font-bold focus:outline-none"
-                      >
-                        <option value="quiz">Quiz</option>
-                        <option value="forca">Forca</option>
-                        <option value="verdadeiro_falso">Verdadeiro ou Falso</option>
-                        <option value="jogo_das_cores">Jogo das Cores</option>
-                        <option value="stop_adedonha">Stop / Adedonha (Em Construção)</option>
-                      </select>
-                    </div>
+                  {/* PROFESSOR GAMES RELEASE PANEL (LIBERADO / TRANCADO MATCHING REFERENCE) */}
+                  <div className="w-full bg-slate-950/90 border-2 border-emerald-500/40 p-6 rounded-3xl space-y-4 shadow-2xl">
+                    <h4 className="text-xs font-black text-emerald-300 uppercase tracking-wider mb-2">
+                      🎛️ Painel de Controle de Jogos (Toque para Liberar ou Trancar):
+                    </h4>
 
-                    <button
-                      onClick={() => handleToggleLiberarJogos(sala.id, jogoLiberado)}
-                      className={`px-5 py-2.5 rounded-xl font-black text-xs shadow-lg transition flex items-center space-x-2 ${jogoLiberado ? 'bg-emerald-400 hover:bg-emerald-300 text-slate-950' : 'bg-amber-400 hover:bg-amber-300 text-slate-950'}`}
-                    >
-                      {jogoLiberado ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
-                      <span>{jogoLiberado ? 'Jogos Liberados (Bloquear)' : 'Liberar Jogos para Alunos'}</span>
-                    </button>
+                    <div className="grid grid-cols-1 gap-3">
+                      {[
+                        { id: 'jogo_das_cores', name: 'JOGO DAS CORES' },
+                        { id: 'verdadeiro_falso', name: 'VERDADEIRO OU FALSO' },
+                        { id: 'quiz', name: 'QUIZ' },
+                        { id: 'forca', name: 'JOGO DA FORCA' },
+                        { id: 'stop_adedonha', name: 'STOP / ADEDONHA' }
+                      ].map((game) => {
+                        const statusMap = sala.jogosStatus || {};
+                        const isLiberado = statusMap[game.id] === true;
+
+                        return (
+                          <div key={game.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#052c1e] p-3 rounded-2xl border border-emerald-800">
+                            {/* Game Name Button */}
+                            <div
+                              onClick={() => handleChangeJogoAtivo(sala.id, game.id)}
+                              className={`bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 font-black py-2.5 px-6 rounded-xl shadow-md text-sm text-center tracking-wide flex-1 cursor-pointer transition ${jogoAtivo === game.id ? 'ring-4 ring-yellow-400 scale-101' : 'opacity-90'}`}
+                              title="Clique para selecionar como Jogo Ativo"
+                            >
+                              {game.name} {jogoAtivo === game.id ? '⭐ (Selecionado)' : ''}
+                            </div>
+
+                            {/* Liberado / Trancado buttons */}
+                            <div className="flex items-center space-x-2 justify-end">
+                              <button
+                                type="button"
+                                onClick={() => handleSetGameStatus(sala.id, game.id, true)}
+                                className={`px-6 py-2.5 rounded-xl font-black text-xs uppercase transition shadow-lg ${isLiberado ? 'bg-gradient-to-r from-emerald-600 to-green-500 text-white ring-2 ring-emerald-300 scale-105' : 'bg-emerald-950/80 text-emerald-400/60 hover:bg-emerald-900'}`}
+                              >
+                                liberado
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleSetGameStatus(sala.id, game.id, false)}
+                                className={`px-6 py-2.5 rounded-xl font-black text-xs uppercase transition shadow-lg ${!isLiberado ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white ring-2 ring-red-300 scale-105' : 'bg-red-950/80 text-red-400/60 hover:bg-red-900'}`}
+                              >
+                                trancado
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   {/* JOGO DAS CORES TEACHER CONTROLS */}

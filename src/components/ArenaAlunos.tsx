@@ -544,54 +544,58 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                 </div>
               </div>
 
-              {/* PROFESSOR RELEASE GATE */}
-              {!jogoLiberado ? (
-                <div className="bg-slate-950 border border-amber-500/40 rounded-3xl p-12 text-center space-y-6 shadow-2xl">
-                  <div className="w-20 h-20 rounded-full bg-amber-400/20 border-2 border-amber-400 flex items-center justify-center mx-auto text-amber-400 animate-pulse">
-                    <Lock className="w-10 h-10" />
-                  </div>
-                  <div className="space-y-2 max-w-md mx-auto">
-                    <h4 className="text-2xl font-black text-white">Cadeira Garantida!</h4>
-                    <p className="text-sm text-cyan-300/80">
-                      Aguardando o professor liberar o próximo jogo na Arena... Fique atento!
-                    </p>
-                  </div>
-                  <div className="inline-block px-6 py-2 rounded-full bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs font-bold animate-bounce">
-                    ⏳ Conectado ao Painel do Professor
-                  </div>
+              {/* GAMES LIST WITH LIVE LIBERADO / TRANCADO STATUS */}
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2 bg-[#052c1e] p-4 rounded-2xl border border-emerald-800 text-emerald-300 font-bold text-sm">
+                  <Gamepad2 className="w-5 h-5 text-amber-400" />
+                  <span>Selecione um jogo liberado pelo professor:</span>
                 </div>
-              ) : (
-                <div className="bg-slate-950 border border-emerald-500/50 rounded-3xl p-8 md:p-12 text-center space-y-6 shadow-2xl">
-                  <div className="w-20 h-20 rounded-full bg-emerald-500/20 border-2 border-emerald-400 flex items-center justify-center mx-auto text-emerald-400 animate-bounce">
-                    <Unlock className="w-10 h-10" />
-                  </div>
-                  <div className="space-y-2 max-w-md mx-auto">
-                    <h4 className="text-3xl font-black text-white">Jogo Liberado pelo Professor!</h4>
-                    <p className="text-lg font-black text-amber-400 uppercase tracking-wide">
-                      {selectedSala.jogoAtivo === 'jogo_das_cores' && '🎨 Jogo das Cores'}
-                      {selectedSala.jogoAtivo === 'quiz' && '🧠 Quiz de Conhecimentos'}
-                      {selectedSala.jogoAtivo === 'verdadeiro_falso' && '⚖️ Verdadeiro ou Falso'}
-                      {selectedSala.jogoAtivo === 'forca' && '🔤 Jogo da Forca'}
-                      {selectedSala.jogoAtivo === 'stop_adedonha' && '🚧 Stop / Adedonha (Em Construção)'}
-                    </p>
-                  </div>
 
-                  <button
-                    onClick={() => {
-                      setActiveGame(selectedSala.jogoAtivo || 'quiz');
-                      setStep('play_game');
-                      setQuestionIdx(0);
-                      setSelectedAnswer(null);
-                      setAnsweredResult(null);
-                      setFeedbackColorMsg(null);
-                    }}
-                    className="px-8 py-5 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xl shadow-2xl transition transform hover:scale-105 inline-flex items-center space-x-3"
-                  >
-                    <Gamepad2 className="w-6 h-6" />
-                    <span>ENTRAR NO JOGO AGORA ➔</span>
-                  </button>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[
+                    { id: 'jogo_das_cores', title: 'JOGO DAS CORES', desc: 'Não aperte na cor proibida', color: 'from-purple-600 to-pink-600' },
+                    { id: 'verdadeiro_falso', title: 'VERDADEIRO OU FALSO', desc: 'Afirmações rápidas', color: 'from-emerald-600 to-teal-600' },
+                    { id: 'quiz', title: 'QUIZ', desc: 'Múltipla escolha de conhecimentos', color: 'from-blue-600 to-cyan-600' },
+                    { id: 'forca', title: 'JOGO DA FORCA', desc: 'Adivinhe a palavra secreta', color: 'from-amber-600 to-yellow-600' },
+                    { id: 'stop_adedonha', title: 'STOP / ADEDONHA', desc: 'Em construção', color: 'from-slate-700 to-slate-800' }
+                  ].map((g) => {
+                    const statusMap = selectedSala.jogosStatus || {};
+                    const isUnlocked = statusMap[g.id] === true || (selectedSala.jogoLiberado && selectedSala.jogoAtivo === g.id);
+
+                    return (
+                      <div
+                        key={g.id}
+                        onClick={() => {
+                          if (!isUnlocked) {
+                            alert('Este jogo está trancado pelo professor no momento.');
+                            return;
+                          }
+                          setActiveGame(g.id as any);
+                          setStep('play_game');
+                          setQuestionIdx(0);
+                          setSelectedAnswer(null);
+                          setAnsweredResult(null);
+                          setFeedbackColorMsg(null);
+                        }}
+                        className={`border p-6 rounded-3xl transition flex flex-col justify-between ${isUnlocked ? `bg-gradient-to-br ${g.color} border-white/30 cursor-pointer shadow-xl transform hover:scale-102` : 'bg-slate-950/90 border-red-900/60 opacity-80 cursor-not-allowed'}`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h4 className="text-base font-black text-white mb-1">{g.title}</h4>
+                            <p className="text-xs text-white/80">{g.desc}</p>
+                          </div>
+                          <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${isUnlocked ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}>
+                            {isUnlocked ? 'liberado' : 'trancado'}
+                          </span>
+                        </div>
+                        <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-xs font-black text-white">
+                          <span>{isUnlocked ? 'Jogar Agora ➔' : 'Trancado pelo Professor'}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
+              </div>
 
             </div>
           )}
