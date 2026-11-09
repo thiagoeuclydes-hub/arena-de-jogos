@@ -54,11 +54,12 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
   });
 
   // Game state
-  const [activeGame, setActiveGame] = useState<'quiz' | 'forca' | 'verdadeiro_falso'>('quiz');
+  const [activeGame, setActiveGame] = useState<'quiz' | 'forca' | 'verdadeiro_falso' | 'jogo_das_cores'>('quiz');
   const [score, setScore] = useState(0);
   const [questionIdx, setQuestionIdx] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [answeredResult, setAnsweredResult] = useState<boolean | null>(null);
+  const [feedbackColorMsg, setFeedbackColorMsg] = useState<string | null>(null);
 
   // Forca game state
   const [forcaIdx, setForcaIdx] = useState(0);
@@ -160,13 +161,14 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
             id: c.id,
             ocupada: true,
             nomeAluno: nome.trim(),
-            avatar: avatar
+            avatar: avatar,
+            score: score || 0
           };
         }
         return c;
       });
 
-      await updateDoc(salaRef, {
+      await updateDoc(doc(db as any, 'salas', selectedSala.id), {
         cadeiras: updatedCadeiras
       });
 
@@ -220,7 +222,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
     setScore(newScore);
     if (!mySalaId || !myChairId || !db) return;
     try {
-      const salaRef = doc(db, 'salas', mySalaId);
+      const salaRef = doc(db as any, 'salas', mySalaId);
       const docSnap = await getDoc(salaRef);
       if (docSnap.exists()) {
         const salaData = docSnap.data();
@@ -533,8 +535,9 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                     <span>🎉 O Professor liberou a Arena de Jogos! Escolha um jogo abaixo para começar:</span>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {[
+                      { id: 'jogo_das_cores', title: 'Jogo das Cores', desc: 'Não aperte na cor escolhida pelo professor!', color: 'from-purple-600 to-pink-600' },
                       { id: 'quiz', title: 'Quiz', desc: 'Múltipla escolha de conhecimentos', color: 'from-blue-600 to-cyan-600' },
                       { id: 'verdadeiro_falso', title: 'Verdadeiro ou Falso', desc: 'Afirmações rápidas', color: 'from-emerald-600 to-teal-600' },
                       { id: 'forca', title: 'Forca', desc: 'Adivinhe a palavra secreta', color: 'from-amber-600 to-yellow-600' }
@@ -579,6 +582,73 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                 </button>
                 <span className="text-amber-400 font-black">{score} pts</span>
               </div>
+
+              {/* JOGO DAS CORES GAME */}
+              {activeGame === 'jogo_das_cores' && (
+                <div className="space-y-6">
+                  <div className="inline-block bg-purple-600/30 border border-purple-400 text-purple-300 text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-widest">
+                    JOGO DAS CORES
+                  </div>
+
+                  <div className="bg-red-500/20 border-2 border-red-500 p-6 rounded-3xl space-y-2 shadow-2xl">
+                    <h3 className="text-xl md:text-2xl font-black text-red-400 uppercase tracking-wide">
+                      NÃO PODE APERTAR NA COR:
+                    </h3>
+                    <div className="text-2xl md:text-3xl font-black text-amber-300 uppercase tracking-wider bg-slate-950 py-3 px-6 rounded-2xl inline-block border border-amber-400/40 shadow-inner">
+                      {selectedSala.corProibida ? selectedSala.corProibida : 'Aguardando o professor escolher...'}
+                    </div>
+                  </div>
+
+                  {!selectedSala.corProibida ? (
+                    <div className="text-sm text-cyan-300/80 bg-slate-950 p-6 rounded-2xl border border-cyan-900">
+                      O professor ainda não definiu a cor proibida. Aguarde o professor escolher uma cor no painel dele!
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <p className="text-xs font-bold text-cyan-300">
+                        Clique em qualquer cor <strong>DIFERENTE</strong> da cor proibida acima (+10 pts por acerto, -5 pts por erro):
+                      </p>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        {[
+                          { key: 'vermelho', label: 'Vermelho', color: 'bg-red-600 hover:bg-red-500 text-white border-red-400' },
+                          { key: 'azul', label: 'Azul', color: 'bg-blue-600 hover:bg-blue-500 text-white border-blue-400' },
+                          { key: 'amarelo', label: 'Amarelo', color: 'bg-yellow-400 hover:bg-yellow-300 text-slate-950 border-yellow-200' },
+                          { key: 'verde', label: 'Verde', color: 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400' },
+                          { key: 'laranja', label: 'Laranja', color: 'bg-orange-500 hover:bg-orange-400 text-white border-orange-400' },
+                          { key: 'roxo', label: 'Roxo', color: 'bg-purple-600 hover:bg-purple-500 text-white border-purple-400' }
+                        ].map((c) => (
+                          <button
+                            key={c.key}
+                            onClick={() => {
+                              const isForbidden = c.key === selectedSala.corProibida;
+                              if (isForbidden) {
+                                addScorePoints(-5);
+                                setAnsweredResult(false);
+                                setFeedbackColorMsg(`❌ Errou! Você clicou na cor proibida (${c.label})! -5 pts`);
+                              } else {
+                                addScorePoints(10);
+                                setAnsweredResult(true);
+                                setFeedbackColorMsg(`🎉 Acertou! Escolheu ${c.label}! +10 pts`);
+                                confetti({ particleCount: 40, spread: 50, origin: { y: 0.6 } });
+                              }
+                            }}
+                            className={`p-6 rounded-2xl border-4 font-black text-lg shadow-xl transition transform hover:scale-105 ${c.color}`}
+                          >
+                            {c.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {feedbackColorMsg && (
+                        <div className={`p-4 rounded-2xl font-black text-sm animate-bounce ${answeredResult ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-red-500/20 text-red-300 border border-red-500/40'}`}>
+                          {feedbackColorMsg}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* QUIZ GAME */}
               {activeGame === 'quiz' && (
