@@ -258,6 +258,32 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
     }
   };
 
+  const handleSetCorRodada = async (salaId: string, cor: string) => {
+    if (!db) return;
+    try {
+      const sala = salas.find(s => s.id === salaId);
+      const currentRodada = sala?.rodadaId || 0;
+      await updateDoc(doc(db as any, 'salas', salaId), {
+        corRodada: cor,
+        rodadaId: currentRodada + 1,
+        jogoCoresLiberado: true
+      });
+    } catch (err) {
+      console.error("Erro ao definir cor da rodada:", err);
+    }
+  };
+
+  const handleToggleJogoCores = async (salaId: string, currentState: boolean) => {
+    if (!db) return;
+    try {
+      await updateDoc(doc(db as any, 'salas', salaId), {
+        jogoCoresLiberado: !currentState
+      });
+    } catch (err) {
+      console.error("Erro ao alternar jogo das cores:", err);
+    }
+  };
+
   // Banco de Questões handlers
   const handleOpenQuestionModal = (gameType: 'forca' | 'verdadeiro_falso' | 'quiz') => {
     setActiveQuestionGame(gameType);
@@ -454,53 +480,8 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
         </div>
       </div>
 
-      {/* Game Action Buttons Grid (matching style from screenshot) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl mx-auto w-full">
-        <div className="grid grid-cols-1 gap-3">
-          {['JOGO DAS CORES', 'VERDADEIRO OU FALSO', 'QUIZ'].map((gameName, idx) => (
-            <div
-              key={idx}
-              className="bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 font-black text-center py-3 px-6 rounded-xl shadow-lg border-2 border-cyan-200 tracking-wide text-sm flex items-center justify-between"
-            >
-              <Gamepad2 className="w-5 h-5 text-slate-950" />
-              <span>{gameName}</span>
-              <span className="text-xs bg-slate-950 text-cyan-300 px-2 py-1 rounded-lg">Ativo</span>
-            </div>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-1 gap-3">
-          {['JOGO DA FORCA', 'STOP / ADEDONHA'].map((gameName, idx) => (
-            <div
-              key={idx}
-              className="bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 font-black text-center py-3 px-6 rounded-xl shadow-lg border-2 border-cyan-200 tracking-wide text-sm flex items-center justify-between"
-            >
-              <Gamepad2 className="w-5 h-5 text-slate-950" />
-              <span>{gameName}</span>
-              <span className="text-xs bg-slate-950 text-cyan-300 px-2 py-1 rounded-lg">Ativo</span>
-            </div>
-          ))}
-
-          {/* Insert content buttons (Banco de Questões) */}
-          {[
-            { text: 'INSERIR FORCA', type: 'forca' },
-            { text: 'INSERIR VERDADERIO OU FALSO', type: 'verdadeiro_falso' },
-            { text: 'INSERIR QUIZ', type: 'quiz' }
-          ].map((btn, idx) => (
-            <button
-              key={idx}
-              onClick={() => handleOpenQuestionModal(btn.type as any)}
-              className="bg-gradient-to-r from-slate-200 to-slate-300 hover:from-white hover:to-slate-200 text-slate-900 font-black text-center py-2.5 px-4 rounded-xl shadow-md border border-slate-400 text-xs tracking-wide transition transform hover:scale-101 flex items-center justify-center space-x-2"
-            >
-              <BookOpen className="w-4 h-4 text-emerald-700" />
-              <span>{btn.text}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* SALAS E SENHAS Header Banner */}
-      <div className="max-w-md mx-auto w-full text-center mt-6">
+      <div className="max-w-md mx-auto w-full text-center mt-2">
         <div className="bg-gradient-to-r from-lime-300 to-emerald-400 text-slate-950 font-black py-3 px-6 rounded-2xl shadow-xl border-2 border-lime-100 tracking-wider uppercase text-lg">
           SALAS E SENHAS
         </div>
@@ -540,81 +521,7 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                     </p>
                   </div>
 
-                  {/* PROFESSOR GAMES RELEASE PANEL (LIBERADO / TRANCADO MATCHING REFERENCE) */}
-                  <div className="w-full lg:w-auto bg-slate-950/90 border-2 border-emerald-500/40 p-5 rounded-3xl space-y-4 shadow-2xl">
-                    <h4 className="text-xs font-black text-emerald-300 uppercase tracking-wider mb-2">
-                      🎛️ Painel de Jogos (Liberar / Trancar):
-                    </h4>
 
-                    <div className="grid grid-cols-1 gap-2.5">
-                      {[
-                        { id: 'jogo_das_cores', name: 'JOGO DAS CORES' },
-                        { id: 'verdadeiro_falso', name: 'VERDADEIRO OU FALSO' },
-                        { id: 'quiz', name: 'QUIZ' },
-                        { id: 'forca', name: 'JOGO DA FORCA' },
-                        { id: 'stop_adedonha', name: 'STOP / ADEDONHA' }
-                      ].map((game) => {
-                        const statusMap = sala.jogosStatus || {};
-                        const isLiberado = statusMap[game.id] === true;
-
-                        return (
-                          <div key={game.id} className="flex items-center justify-between gap-3 bg-[#052c1e] p-2.5 rounded-xl border border-emerald-800">
-                            <span className="text-xs font-black text-white px-2 truncate">{game.name}</span>
-
-                            <div className="flex items-center space-x-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handleSetGameStatus(sala.id, game.id, true)}
-                                className={`px-4 py-1.5 rounded-lg font-black text-[10px] uppercase transition shadow ${isLiberado ? 'bg-emerald-500 text-slate-950 ring-2 ring-white scale-105' : 'bg-emerald-950 text-emerald-400/50 hover:bg-emerald-900'}`}
-                              >
-                                liberado
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => handleSetGameStatus(sala.id, game.id, false)}
-                                className={`px-4 py-1.5 rounded-lg font-black text-[10px] uppercase transition shadow ${!isLiberado ? 'bg-red-600 text-white ring-2 ring-white scale-105' : 'bg-red-950 text-red-400/50 hover:bg-red-900'}`}
-                              >
-                                trancado
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* JOGO DAS CORES TEACHER CONTROLS */}
-                  {jogoAtivo === 'jogo_das_cores' && (
-                    <div className="w-full mt-4 p-4 bg-slate-950/90 border border-purple-500/40 rounded-2xl space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-black text-purple-300 uppercase tracking-wider">
-                          🎨 Painel do Professor &bull; Escolha a Cor Proibida ("Não pode apertar na cor"):
-                        </span>
-                        <span className="text-xs text-amber-400 font-bold">
-                          Atual: <strong className="uppercase">{sala.corProibida || 'Nenhuma'}</strong>
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {[
-                          { key: 'vermelho', label: 'Vermelho', color: 'bg-red-600' },
-                          { key: 'azul', label: 'Azul', color: 'bg-blue-600' },
-                          { key: 'amarelo', label: 'Amarelo', color: 'bg-yellow-400 text-slate-950' },
-                          { key: 'verde', label: 'Verde', color: 'bg-emerald-600' },
-                          { key: 'laranja', label: 'Laranja', color: 'bg-orange-500' },
-                          { key: 'roxo', label: 'Roxo', color: 'bg-purple-600' }
-                        ].map(c => (
-                          <button
-                            key={c.key}
-                            onClick={() => handleSetCorProibida(sala.id, c.key)}
-                            className={`px-4 py-2 rounded-xl font-black text-xs border transition ${sala.corProibida === c.key ? 'border-white scale-105 shadow-xl ring-2 ring-white' : 'border-transparent opacity-80 hover:opacity-100'} ${c.color}`}
-                          >
-                            {c.label} {sala.corProibida === c.key ? '✓ (Proibida)' : ''}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
 
                   <div className="flex flex-wrap items-center gap-2">
                     <button
@@ -652,6 +559,47 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                       <Trash2 className="w-3.5 h-3.5" />
                       <span>Apagar</span>
                     </button>
+                  </div>
+                </div>
+
+                {/* JOGO DAS CORES - PAINEL DO PROFESSOR */}
+                <div className="w-full p-5 bg-slate-950/90 border-2 border-purple-500/50 rounded-3xl space-y-4 shadow-2xl">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm font-black text-purple-300 uppercase tracking-wider">
+                        🎨 JOGO DAS CORES &bull; Escolha a Cor da Rodada
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleJogoCores(sala.id, sala.jogoCoresLiberado)}
+                      className={`px-4 py-1.5 rounded-xl font-black text-xs uppercase transition shadow ${sala.jogoCoresLiberado ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}
+                    >
+                      {sala.jogoCoresLiberado ? 'Liberado para Alunos 🔓' : 'Trancado 🔒'}
+                    </button>
+                  </div>
+
+                  <p className="text-xs text-purple-200/80">
+                    Clique em uma cor abaixo. Assim que clicar, a cor correta é definida e liberada para os alunos.
+                  </p>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                    {[
+                      { key: 'vermelho', label: 'VERMELHO', color: 'bg-red-600' },
+                      { key: 'azul', label: 'AZUL', color: 'bg-blue-600' },
+                      { key: 'amarelo', label: 'AMARELO', color: 'bg-yellow-400 text-slate-950' },
+                      { key: 'verde', label: 'VERDE', color: 'bg-emerald-600' },
+                      { key: 'laranja', label: 'LARANJA', color: 'bg-orange-500' },
+                      { key: 'roxo', label: 'ROXO', color: 'bg-purple-600' }
+                    ].map(c => (
+                      <button
+                        key={c.key}
+                        onClick={() => handleSetCorRodada(sala.id, c.key)}
+                        className={`p-4 rounded-2xl font-black text-xs border-2 transition transform hover:scale-105 shadow-lg ${sala.corRodada === c.key ? 'border-white ring-4 ring-white/50 scale-105' : 'border-transparent'} ${c.color}`}
+                      >
+                        {sala.corRodada === c.key ? `✓ ${c.label}` : c.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
 

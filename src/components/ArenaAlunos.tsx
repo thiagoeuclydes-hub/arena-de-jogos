@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Key, Armchair, RefreshCw, CheckCircle2, LogOut, Gamepad2, Lock, Unlock, Trophy, XCircle } from 'lucide-react';
+import { ArrowLeft, Key, Armchair, RefreshCw, LogOut, Gamepad2 } from 'lucide-react';
 import { collection, doc, getDoc, updateDoc, onSnapshot, runTransaction } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '../firebase';
 import confetti from 'canvas-confetti';
@@ -10,32 +10,13 @@ interface ArenaAlunosProps {
 
 const AVATARS = ['🦊', '🐼', '🦁', '🐯', '🐸', '🐵', '🦄', '🐲', '🤖', '👾', '🚀', '⚽'];
 
-// Sample questions for the 3 games
-const QUIZ_QUESTIONS = [
-  { question: "Qual é o maior país do mundo em território?", options: ["Canadá", "China", "Rússia", "Estados Unidos"], correctIndex: 2 },
-  { question: "Em qual continente fica o Deserto do Saara?", options: ["Ásia", "África", "Oceania", "América do Sul"], correctIndex: 1 },
-  { question: "Qual a fórmula química da água?", options: ["H2O", "CO2", "NaCl", "O2"], correctIndex: 0 }
-];
-
-const VF_QUESTIONS = [
-  { statement: "A Terra é redonda (formato geoide).", isTrue: true },
-  { statement: "O Sol gira em torno da Terra.", isTrue: false },
-  { statement: "A água ferve a 100°C ao nível do mar.", isTrue: true }
-];
-
-const FORCA_WORDS = [
-  { word: "GEOGRAFIA", hint: "Estudo da Terra e mapas" },
-  { word: "CIENCIAS", hint: "Estudo da natureza e experimentos" },
-  { word: "PLANETA", hint: "Corpo celeste que orbita uma estrela" }
-];
-
 export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
   const [salas, setSalas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSala, setSelectedSala] = useState<any>(null);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
-  const [step, setStep] = useState<'list' | 'pin' | 'profile' | 'grid' | 'arena_hub' | 'play_game'>('list');
+  const [step, setStep] = useState<'list' | 'pin' | 'profile' | 'grid' | 'arena_hub' | 'play_jogo_cores'>('list');
 
   const [nome, setNome] = useState('');
   const [avatar, setAvatar] = useState('🦁');
@@ -53,40 +34,17 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
     return null;
   });
 
-  // Game state
-  const [activeGame, setActiveGame] = useState<'quiz' | 'forca' | 'verdadeiro_falso' | 'jogo_das_cores' | 'stop_adedonha'>('quiz');
   const [score, setScore] = useState(0);
-  const [questionIdx, setQuestionIdx] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
-  const [answeredResult, setAnsweredResult] = useState<boolean | null>(null);
-  const [feedbackColorMsg, setFeedbackColorMsg] = useState<string | null>(null);
 
-  // Forca game state
-  const [forcaIdx, setForcaIdx] = useState(0);
-  const [guessedLetters, setGuessedLetters] = useState<string[]>([]);
-
-  // Banco de questões from Firestore
-  const [bancoQuestoes, setBancoQuestoes] = useState<any[]>([]);
+  // Jogo das Cores student state for round locking
+  const [lastRodadaAnswered, setLastRodadaAnswered] = useState<number | null>(null);
+  const [feedbackMsg, setFeedbackMsg] = useState<{ text: string; correct: boolean } | null>(null);
 
   useEffect(() => {
     if (!isFirebaseConfigured || !db) {
       setLoading(false);
       return;
     }
-
-    const unsubBanco = onSnapshot(
-      collection(db as any, 'banco_questoes'),
-      (snapshot) => {
-        const list: any[] = [];
-        snapshot.forEach((docSnap) => {
-          list.push({ id: docSnap.id, ...docSnap.data() });
-        });
-        setBancoQuestoes(list);
-      },
-      (err) => {
-        console.error("Erro ao carregar banco de questões:", err);
-      }
-    );
 
     const unsubscribe = onSnapshot(
       collection(db, 'salas'),
@@ -152,10 +110,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
       }
     );
 
-    return () => {
-      unsubscribe();
-      unsubBanco();
-    };
+    return () => unsubscribe();
   }, []);
 
   const handleSelectSala = (sala: any) => {
@@ -167,7 +122,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
 
   const handleVerifyPin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (pinInput.trim() === String(selectedSala.pin || '1234')) {
+    if (pinInput.trim() === String(selectedSala?.pin || '1234')) {
       setPinError('');
       setStep('profile');
     } else {
@@ -228,7 +183,6 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
       setMySalaId(selectedSala.id);
       setMyChairId(chairId);
 
-      // REDIRECIONADO À ARENA DE JOGOS APÓS CLICAR NA CADEIRA
       setStep('arena_hub');
       confetti({ particleCount: 70, spread: 80, origin: { y: 0.6 } });
     } catch (err) {
@@ -291,6 +245,9 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
     }
   };
 
+  const currentRodadaId = selectedSala?.rodadaId || 0;
+  const hasAnsweredCurrentRodada = lastRodadaAnswered === currentRodadaId;
+
   if (!isFirebaseConfigured) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
@@ -302,8 +259,6 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
       </div>
     );
   }
-
-  const jogoLiberado = selectedSala?.jogoLiberado === true;
 
   return (
     <div className="flex-1 flex flex-col w-full max-w-5xl mx-auto py-8 px-4 space-y-6">
@@ -473,7 +428,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
             </div>
           )}
 
-          {/* STEP 4: CHAIR GRID (AO CLICAR NA CADEIRA -> REDIRECIONADO À ARENA DE JOGOS) */}
+          {/* STEP 4: CHAIR GRID */}
           {step === 'grid' && selectedSala && (
             <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 md:p-8 shadow-xl space-y-6">
               
@@ -495,7 +450,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
 
               <div>
                 <p className="text-xs font-bold text-cyan-300 mb-4">
-                  👉 Clique em uma cadeira livre (Verde) para sentar-se e ir para a <strong>Arena de Jogos</strong>:
+                  👉 Clique em uma cadeira livre (Verde) para sentar-se e entrar na <strong>Arena</strong>:
                 </p>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-10 gap-3">
@@ -532,7 +487,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
             </div>
           )}
 
-          {/* STEP 5: ARENA DE JOGOS HUB (EXIGE LIBERAÇÃO DO PROFESSOR) */}
+          {/* STEP 5: ARENA HUB (JOGO DAS CORES) */}
           {step === 'arena_hub' && selectedSala && (
             <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 md:p-8 shadow-xl space-y-8">
               
@@ -551,7 +506,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
 
                 <div className="flex items-center space-x-3">
                   <div className="text-right">
-                    <span className="text-xs uppercase text-cyan-300 font-bold block">Pontuação</span>
+                    <span className="text-xs uppercase text-cyan-300 font-bold block">Pontuação Atual</span>
                     <span className="text-2xl font-black text-amber-400">{score} pts</span>
                   </div>
                   <button
@@ -564,64 +519,50 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                 </div>
               </div>
 
-              {/* GAMES LIST WITH LIVE LIBERADO / TRANCADO STATUS */}
               <div className="space-y-4">
                 <div className="flex items-center space-x-2 bg-[#052c1e] p-4 rounded-2xl border border-emerald-800 text-emerald-300 font-bold text-sm">
                   <Gamepad2 className="w-5 h-5 text-amber-400" />
-                  <span>Selecione um jogo liberado pelo professor:</span>
+                  <span>Jogo Ativo:</span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {[
-                    { id: 'jogo_das_cores', title: 'JOGO DAS CORES', desc: 'Não aperte na cor proibida', color: 'from-purple-600 to-pink-600' },
-                    { id: 'verdadeiro_falso', title: 'VERDADEIRO OU FALSO', desc: 'Afirmações rápidas', color: 'from-emerald-600 to-teal-600' },
-                    { id: 'quiz', title: 'QUIZ', desc: 'Múltipla escolha de conhecimentos', color: 'from-blue-600 to-cyan-600' },
-                    { id: 'forca', title: 'JOGO DA FORCA', desc: 'Adivinhe a palavra secreta', color: 'from-amber-600 to-yellow-600' },
-                    { id: 'stop_adedonha', title: 'STOP / ADEDONHA', desc: 'Em construção', color: 'from-slate-700 to-slate-800' }
-                  ].map((g) => {
-                    const statusMap = selectedSala.jogosStatus || {};
-                    const isUnlocked = statusMap[g.id] === true || (selectedSala.jogoLiberado && selectedSala.jogoAtivo === g.id);
+                {(() => {
+                  const isUnlocked = selectedSala.jogoCoresLiberado === true;
 
-                    return (
-                      <div
-                        key={g.id}
-                        onClick={() => {
-                          if (!isUnlocked) {
-                            alert('Este jogo está trancado pelo professor no momento.');
-                            return;
-                          }
-                          setActiveGame(g.id as any);
-                          setStep('play_game');
-                          setQuestionIdx(0);
-                          setSelectedAnswer(null);
-                          setAnsweredResult(null);
-                          setFeedbackColorMsg(null);
-                        }}
-                        className={`border p-6 rounded-3xl transition flex flex-col justify-between ${isUnlocked ? `bg-gradient-to-br ${g.color} border-white/30 cursor-pointer shadow-xl transform hover:scale-102` : 'bg-slate-950/90 border-red-900/60 opacity-80 cursor-not-allowed'}`}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <h4 className="text-base font-black text-white mb-1">{g.title}</h4>
-                            <p className="text-xs text-white/80">{g.desc}</p>
-                          </div>
-                          <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${isUnlocked ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}>
-                            {isUnlocked ? 'liberado' : 'trancado'}
-                          </span>
+                  return (
+                    <div
+                      onClick={() => {
+                        if (!isUnlocked) {
+                          alert('O Jogo das Cores está trancado pelo professor no momento.');
+                          return;
+                        }
+                        setStep('play_jogo_cores');
+                        setFeedbackMsg(null);
+                      }}
+                      className={`border p-8 rounded-3xl transition flex flex-col justify-between ${isUnlocked ? 'bg-gradient-to-br from-purple-600 to-pink-600 border-white/30 cursor-pointer shadow-2xl transform hover:scale-102' : 'bg-slate-950/90 border-red-900/60 opacity-80 cursor-not-allowed'}`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h4 className="text-2xl font-black text-white mb-2">🎨 JOGO DAS CORES</h4>
+                          <p className="text-sm text-white/90">Ouça o comando do professor, clique na cor correta e acumule pontos!</p>
                         </div>
-                        <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-xs font-black text-white">
-                          <span>{isUnlocked ? 'Jogar Agora ➔' : 'Trancado pelo Professor'}</span>
-                        </div>
+                        <span className={`px-4 py-1.5 rounded-full text-xs font-black uppercase ${isUnlocked ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}>
+                          {isUnlocked ? 'liberado 🔓' : 'trancado 🔒'}
+                        </span>
                       </div>
-                    );
-                  })}
-                </div>
+                      <div className="mt-6 pt-4 border-t border-white/20 flex items-center justify-between text-sm font-black text-white">
+                        <span>{isUnlocked ? 'Jogar Agora ➔' : 'Aguardando Liberação do Professor'}</span>
+                        <span className="text-amber-300">Sua Pontuação: {score} pts</span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
             </div>
           )}
 
-          {/* STEP 6: PLAY ACTIVE GAME (QUIZ, FORCA, V/F) */}
-          {step === 'play_game' && selectedSala && (
+          {/* STEP 6: PLAY JOGO DAS CORES (6 CORES, 1ª VALE, 2ª TRAVADA ATÉ O PROFESSOR MUDAR) */}
+          {step === 'play_jogo_cores' && selectedSala && (
             <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 md:p-8 shadow-xl space-y-6 max-w-2xl mx-auto w-full text-center">
               
               <div className="flex items-center justify-between">
@@ -629,261 +570,85 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                   onClick={() => setStep('arena_hub')}
                   className="px-4 py-2 rounded-xl bg-slate-950 border border-cyan-500/30 text-cyan-300 font-bold text-xs"
                 >
-                  ← Voltar aos Jogos
+                  ← Voltar
                 </button>
-                <span className="text-amber-400 font-black">{score} pts</span>
+                <div className="bg-amber-400/20 border border-amber-400/40 px-4 py-1.5 rounded-xl">
+                  <span className="text-xs text-cyan-200 font-bold mr-2">Evolução:</span>
+                  <span className="text-lg font-black text-amber-400">{score} pts</span>
+                </div>
               </div>
 
-              {/* JOGO DAS CORES GAME */}
-              {activeGame === 'jogo_das_cores' && (
-                <div className="space-y-6">
-                  <div className="inline-block bg-purple-600/30 border border-purple-400 text-purple-300 text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-widest">
-                    JOGO DAS CORES &bull; SUA PLACAR: {score} PTS
+              <div className="space-y-6">
+                <div className="inline-block bg-purple-600/30 border border-purple-400 text-purple-300 text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-widest">
+                  🎨 JOGO DAS CORES &bull; SALA: {selectedSala.nome}
+                </div>
+
+                {!selectedSala.corRodada ? (
+                  <div className="text-sm text-cyan-300/80 bg-slate-950 p-8 rounded-2xl border border-cyan-900 space-y-2">
+                    <p className="font-bold">Aguardando o professor escolher a cor da rodada...</p>
+                    <p className="text-xs text-cyan-400/60">Ouça o comando por voz do professor!</p>
                   </div>
-
-                  {!selectedSala.corProibida ? (
-                    <div className="text-sm text-cyan-300/80 bg-slate-950 p-6 rounded-2xl border border-cyan-900">
-                      Aguardando o professor escolher a cor no painel dele...
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <p className="text-xs font-bold text-cyan-300">
-                        Escolha uma cor abaixo (+10 pts por acerto, -5 pts por erro):
+                ) : (
+                  <div className="space-y-6">
+                    <div className="bg-slate-950 p-6 rounded-2xl border-2 border-purple-500/60 shadow-lg space-y-2">
+                      <span className="text-xs uppercase font-black text-purple-300 tracking-wider block">🎤 Obre o Comando do Professor:</span>
+                      <p className="text-xs text-cyan-300/80">
+                        Cada acerto: <strong className="text-emerald-400">+10 pts</strong> | Cada erro: <strong className="text-red-400">-5 pts</strong>
                       </p>
-
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                        {[
-                          { key: 'vermelho', label: 'Vermelho', color: 'bg-red-600 hover:bg-red-500 text-white border-red-400' },
-                          { key: 'azul', label: 'Azul', color: 'bg-blue-600 hover:bg-blue-500 text-white border-blue-400' },
-                          { key: 'amarelo', label: 'Amarelo', color: 'bg-yellow-400 hover:bg-yellow-300 text-slate-950 border-yellow-200' },
-                          { key: 'verde', label: 'Verde', color: 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400' },
-                          { key: 'laranja', label: 'Laranja', color: 'bg-orange-500 hover:bg-orange-400 text-white border-orange-400' },
-                          { key: 'roxo', label: 'Roxo', color: 'bg-purple-600 hover:bg-purple-500 text-white border-purple-400' }
-                        ].map((c) => (
-                          <button
-                            key={c.key}
-                            onClick={() => {
-                              const isForbidden = c.key === selectedSala.corProibida;
-                              if (isForbidden) {
-                                addScorePoints(-5);
-                                setAnsweredResult(false);
-                                setFeedbackColorMsg(`❌ Errou! Cor proibida (${c.label})! -5 pts`);
-                              } else {
-                                addScorePoints(10);
-                                setAnsweredResult(true);
-                                setFeedbackColorMsg(`🎉 Acertou! Escolheu ${c.label}! +10 pts`);
-                                confetti({ particleCount: 40, spread: 50, origin: { y: 0.6 } });
-                              }
-                            }}
-                            className={`p-6 rounded-2xl border-4 font-black text-lg shadow-xl transition transform hover:scale-105 ${c.color}`}
-                          >
-                            {c.label}
-                          </button>
-                        ))}
-                      </div>
-
-                      {feedbackColorMsg && (
-                        <div className={`p-4 rounded-2xl font-black text-sm animate-bounce ${answeredResult ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-red-500/20 text-red-300 border border-red-500/40'}`}>
-                          {feedbackColorMsg}
+                      {hasAnsweredCurrentRodada ? (
+                        <div className="p-3 bg-amber-500/20 border border-amber-500/40 rounded-xl text-amber-300 font-bold text-xs">
+                          🔒 Você já respondeu nesta rodada! Aguarde o professor mudar a cor para a próxima rodada.
+                        </div>
+                      ) : (
+                        <div className="p-3 bg-emerald-500/20 border border-emerald-500/40 rounded-xl text-emerald-300 font-bold text-xs">
+                          🔓 Rodada Liberada! Escolha uma cor (A 1ª vale, a 2ª trava).
                         </div>
                       )}
                     </div>
-                  )}
-                </div>
-              )}
 
-              {/* QUIZ GAME */}
-              {activeGame === 'quiz' && (() => {
-                const customQuiz = bancoQuestoes.filter(q => q.tipo === 'quiz');
-                const activeQuizList = customQuiz.length > 0 ? customQuiz : QUIZ_QUESTIONS;
-                const currentQ = activeQuizList[questionIdx % activeQuizList.length];
-
-                return (
-                  <div className="space-y-6">
-                    <div className="inline-block bg-blue-600/30 border border-blue-400 text-blue-300 text-xs font-bold px-3 py-1 rounded-full">
-                      Quiz &bull; Pergunta {(questionIdx % activeQuizList.length) + 1} de {activeQuizList.length}
-                    </div>
-
-                    <h3 className="text-2xl font-black text-white">
-                      {currentQ.question}
-                    </h3>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {currentQ.options.map((opt: string, idx: number) => (
-                        <button
-                          key={idx}
-                          disabled={answeredResult !== null}
-                          onClick={() => {
-                            setSelectedAnswer(idx);
-                            const correctIndex = typeof currentQ.correctIndex === 'number' ? currentQ.correctIndex : 0;
-                            const correct = idx === correctIndex;
-                            setAnsweredResult(correct);
-                            if (correct) {
-                              addScorePoints(10);
-                              confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
-                            }
-                          }}
-                          className={`p-5 rounded-2xl border-2 font-bold text-white transition ${selectedAnswer === idx ? (answeredResult ? 'bg-emerald-600 border-emerald-400' : 'bg-red-600 border-red-400') : 'bg-slate-950 border-cyan-800 hover:bg-cyan-950'}`}
-                        >
-                          {opt}
-                        </button>
-                      ))}
-                    </div>
-
-                    {answeredResult !== null && (
-                      <div className="space-y-4">
-                        <div className={`p-3 rounded-2xl font-bold text-sm ${answeredResult ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}>
-                          {answeredResult ? 'Correto! +10 pts' : 'Incorreto!'}
-                        </div>
-                        <button
-                          onClick={() => {
-                            setQuestionIdx(q => q + 1);
-                            setSelectedAnswer(null);
-                            setAnsweredResult(null);
-                          }}
-                          className="px-6 py-3 bg-amber-400 text-slate-950 font-black rounded-xl text-sm"
-                        >
-                          Próxima Pergunta ➔
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* VERDADEIRO OU FALSO GAME */}
-              {activeGame === 'verdadeiro_falso' && (() => {
-                const customVF = bancoQuestoes.filter(q => q.tipo === 'verdadeiro_falso');
-                const activeVFList = customVF.length > 0 ? customVF : VF_QUESTIONS;
-                const currentVF = activeVFList[questionIdx % activeVFList.length];
-
-                return (
-                  <div className="space-y-6">
-                    <div className="inline-block bg-emerald-600/30 border border-emerald-400 text-emerald-300 text-xs font-bold px-3 py-1 rounded-full">
-                      Verdadeiro ou Falso &bull; Afirmação {(questionIdx % activeVFList.length) + 1} de {activeVFList.length}
-                    </div>
-
-                    <h3 className="text-2xl font-black text-white">
-                      "{currentVF.statement}"
-                    </h3>
-
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                       {[
-                        { label: 'Verdadeiro', val: true },
-                        { label: 'Falso', val: false }
-                      ].map((item, idx) => (
+                        { key: 'vermelho', label: 'VERMELHO', color: 'bg-red-600 hover:bg-red-500 text-white border-red-400' },
+                        { key: 'azul', label: 'AZUL', color: 'bg-blue-600 hover:bg-blue-500 text-white border-blue-400' },
+                        { key: 'amarelo', label: 'AMARELO', color: 'bg-yellow-400 hover:bg-yellow-300 text-slate-950 border-yellow-200' },
+                        { key: 'verde', label: 'VERDE', color: 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400' },
+                        { key: 'laranja', label: 'LARANJA', color: 'bg-orange-500 hover:bg-orange-400 text-white border-orange-400' },
+                        { key: 'roxo', label: 'ROXO', color: 'bg-purple-600 hover:bg-purple-500 text-white border-purple-400' }
+                      ].map((c) => (
                         <button
-                          key={idx}
-                          disabled={answeredResult !== null}
+                          key={c.key}
+                          disabled={hasAnsweredCurrentRodada}
                           onClick={() => {
-                            const correct = item.val === currentVF.isTrue;
-                            setAnsweredResult(correct);
-                            if (correct) {
+                            if (hasAnsweredCurrentRodada) return;
+
+                            setLastRodadaAnswered(currentRodadaId);
+                            const correctColor = selectedSala.corRodada;
+                            const isCorrect = c.key === correctColor;
+
+                            if (isCorrect) {
                               addScorePoints(10);
+                              setFeedbackMsg({ text: `🎉 Acertou! Escolheu ${c.label}! +10 pts`, correct: true });
                               confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
+                            } else {
+                              addScorePoints(-5);
+                              setFeedbackMsg({ text: `❌ Errou! Escolheu ${c.label} (Cor correta era ${correctColor})! -5 pts`, correct: false });
                             }
                           }}
-                          className="p-6 rounded-2xl border-2 font-bold text-lg bg-slate-950 border-cyan-800 hover:bg-cyan-950 text-white"
+                          className={`p-6 rounded-2xl border-4 font-black text-sm md:text-lg shadow-xl transition transform ${hasAnsweredCurrentRodada ? 'opacity-50 cursor-not-allowed bg-slate-900 border-slate-800 text-slate-500' : `hover:scale-105 ${c.color}`}`}
                         >
-                          {item.label}
+                          {c.label}
                         </button>
                       ))}
                     </div>
 
-                    {answeredResult !== null && (
-                      <div className="space-y-4">
-                        <div className={`p-3 rounded-2xl font-bold text-sm ${answeredResult ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}>
-                          {answeredResult ? 'Resposta Certa! +10 pts' : 'Resposta Errada!'}
-                        </div>
-                        <button
-                          onClick={() => {
-                            setQuestionIdx(q => q + 1);
-                            setAnsweredResult(null);
-                          }}
-                          className="px-6 py-3 bg-amber-400 text-slate-950 font-black rounded-xl text-sm"
-                        >
-                          Próxima Afirmação ➔
-                        </button>
+                    {feedbackMsg && (
+                      <div className={`p-4 rounded-2xl font-black text-sm animate-bounce ${feedbackMsg.correct ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-red-500/20 text-red-300 border border-red-500/40'}`}>
+                        {feedbackMsg.text}
                       </div>
                     )}
                   </div>
-                );
-              })()}
-
-              {/* FORCA GAME */}
-              {activeGame === 'forca' && (() => {
-                const customForca = bancoQuestoes.filter(q => q.tipo === 'forca');
-                const activeForcaList = customForca.length > 0 ? customForca : FORCA_WORDS;
-                const currentForca = activeForcaList[forcaIdx % activeForcaList.length];
-                const wordStr = (currentForca.word || '').toUpperCase();
-
-                return (
-                  <div className="space-y-6">
-                    <div className="inline-block bg-amber-600/30 border border-amber-400 text-amber-300 text-xs font-bold px-3 py-1 rounded-full">
-                      Jogo da Forca &bull; Dica: {currentForca.hint}
-                    </div>
-
-                    <div className="text-4xl font-mono tracking-widest text-amber-400 font-black my-4">
-                      {wordStr.split('').map((char: string) => guessedLetters.includes(char) ? char : '_').join(' ')}
-                    </div>
-
-                    <div className="grid grid-cols-6 gap-2 max-w-md mx-auto">
-                      {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(letter => {
-                        const guessed = guessedLetters.includes(letter);
-                        return (
-                          <button
-                            key={letter}
-                            disabled={guessed}
-                            onClick={() => {
-                              const newGuessed = [...guessedLetters, letter];
-                              setGuessedLetters(newGuessed);
-                              const isCorrectLetter = wordStr.includes(letter);
-                              if (isCorrectLetter) {
-                                const wordCompleted = wordStr.split('').every((char: string) => newGuessed.includes(char));
-                                if (wordCompleted) {
-                                  addScorePoints(15);
-                                  confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
-                                }
-                              }
-                            }}
-                            className={`p-3 rounded-xl border font-bold text-sm ${guessed ? 'bg-slate-900 border-slate-800 text-slate-600' : 'bg-slate-950 border-cyan-700 text-white hover:bg-cyan-900'}`}
-                          >
-                            {letter}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        setForcaIdx(f => f + 1);
-                        setGuessedLetters([]);
-                      }}
-                      className="px-6 py-3 bg-amber-400 text-slate-950 font-black rounded-xl text-sm"
-                    >
-                      Próxima Palavra ➔
-                    </button>
-                  </div>
-                );
-              })()}
-
-              {/* STOP / ADEDONHA GAME (EM CONSTRUÇÃO) */}
-              {activeGame === 'stop_adedonha' && (
-                <div className="space-y-6 py-12 text-center">
-                  <div className="inline-block bg-slate-700/30 border border-slate-500 text-slate-300 text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-widest">
-                    Stop / Adedonha &bull; Em Construção
-                  </div>
-                  <h3 className="text-2xl font-black text-white">
-                    🚧 Este jogo está em construção e estará disponível em breve!
-                  </h3>
-                  <button
-                    onClick={() => setStep('arena_hub')}
-                    className="px-6 py-3 bg-amber-400 text-slate-950 font-black rounded-xl text-sm"
-                  >
-                    ← Voltar aos Jogos
-                  </button>
-                </div>
-              )}
+                )}
+              </div>
 
             </div>
           )}

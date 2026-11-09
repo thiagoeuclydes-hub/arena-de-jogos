@@ -5,6 +5,7 @@ import { LoginProfessor } from './components/LoginProfessor';
 import { PainelProfessor } from './components/PainelProfessor';
 import { ArenaAlunos } from './components/ArenaAlunos';
 import { isFirebaseConfigured } from './firebase';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 export default function App() {
   const [view, setView] = useState<'home' | 'login_professor' | 'painel_professor' | 'arena_alunos'>('home');
@@ -33,43 +34,45 @@ export default function App() {
 
       {/* Main Container / Views */}
       <main className="flex-1 flex flex-col z-10 w-full">
-        {!isFirebaseConfigured && (
-          <div className="bg-red-600 text-white text-xs font-bold text-center py-2 px-4">
-            Firebase não configurado. Preencha as variáveis de ambiente no arquivo .env.
-          </div>
-        )}
+        <ErrorBoundary>
+          {!isFirebaseConfigured && (
+            <div className="bg-red-600 text-white text-xs font-bold text-center py-2 px-4">
+              Firebase não configurado. Preencha as variáveis de ambiente no arquivo .env.
+            </div>
+          )}
 
-        {view === 'home' && (
-          <Home
-            onGoProfessor={() => setView(isLoggedIn ? 'painel_professor' : 'login_professor')}
-            onGoAlunos={() => setView('arena_alunos')}
-          />
-        )}
+          {view === 'home' && (
+            <Home
+              onGoProfessor={() => setView(isLoggedIn ? 'painel_professor' : 'login_professor')}
+              onGoAlunos={() => setView('arena_alunos')}
+            />
+          )}
 
-        {view === 'login_professor' && (
-          <LoginProfessor
-            onLoginSuccess={() => {
-              setIsLoggedIn(true);
-              setView('painel_professor');
-            }}
-            onBack={() => setView('home')}
-          />
-        )}
+          {view === 'login_professor' && (
+            <LoginProfessor
+              onLoginSuccess={() => {
+                setIsLoggedIn(true);
+                setView('painel_professor');
+              }}
+              onBack={() => setView('home')}
+            />
+          )}
 
-        {view === 'painel_professor' && (
-          <PainelProfessor
-            onLogout={() => {
-              setIsLoggedIn(false);
-              setView('home');
-            }}
-          />
-        )}
+          {view === 'painel_professor' && (
+            <PainelProfessor
+              onLogout={() => {
+                setIsLoggedIn(false);
+                setView('home');
+              }}
+            />
+          )}
 
-        {view === 'arena_alunos' && (
-          <ArenaAlunos
-            onBack={() => setView('home')}
-          />
-        )}
+          {view === 'arena_alunos' && (
+            <ArenaAlunos
+              onBack={() => setView('home')}
+            />
+          )}
+        </ErrorBoundary>
       </main>
 
       {/* Footer */}
