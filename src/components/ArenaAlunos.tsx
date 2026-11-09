@@ -65,11 +65,28 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
   const [forcaIdx, setForcaIdx] = useState(0);
   const [guessedLetters, setGuessedLetters] = useState<string[]>([]);
 
+  // Banco de questões from Firestore
+  const [bancoQuestoes, setBancoQuestoes] = useState<any[]>([]);
+
   useEffect(() => {
     if (!isFirebaseConfigured || !db) {
       setLoading(false);
       return;
     }
+
+    const unsubBanco = onSnapshot(
+      collection(db as any, 'banco_questoes'),
+      (snapshot) => {
+        const list: any[] = [];
+        snapshot.forEach((docSnap) => {
+          list.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        setBancoQuestoes(list);
+      },
+      (err) => {
+        console.error("Erro ao carregar banco de questões:", err);
+      }
+    );
 
     const unsubscribe = onSnapshot(
       collection(db, 'salas'),
@@ -135,7 +152,10 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
       }
     );
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      unsubBanco();
+    };
   }, []);
 
   const handleSelectSala = (sala: any) => {
@@ -673,175 +693,179 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
               )}
 
               {/* QUIZ GAME */}
-              {activeGame === 'quiz' && (
-                <div className="space-y-6">
-                  <div className="inline-block bg-blue-600/30 border border-blue-400 text-blue-300 text-xs font-bold px-3 py-1 rounded-full">
-                    Quiz &bull; Pergunta {questionIdx + 1} de {QUIZ_QUESTIONS.length}
-                  </div>
+              {activeGame === 'quiz' && (() => {
+                const customQuiz = bancoQuestoes.filter(q => q.tipo === 'quiz');
+                const activeQuizList = customQuiz.length > 0 ? customQuiz : QUIZ_QUESTIONS;
+                const currentQ = activeQuizList[questionIdx % activeQuizList.length];
 
-                  <h3 className="text-2xl font-black text-white">
-                    {QUIZ_QUESTIONS[questionIdx].question}
-                  </h3>
+                return (
+                  <div className="space-y-6">
+                    <div className="inline-block bg-blue-600/30 border border-blue-400 text-blue-300 text-xs font-bold px-3 py-1 rounded-full">
+                      Quiz &bull; Pergunta {(questionIdx % activeQuizList.length) + 1} de {activeQuizList.length}
+                    </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {QUIZ_QUESTIONS[questionIdx].options.map((opt, idx) => (
-                      <button
-                        key={idx}
-                        disabled={answeredResult !== null}
-                        onClick={() => {
-                          setSelectedAnswer(idx);
-                          const correct = idx === QUIZ_QUESTIONS[questionIdx].correctIndex;
-                          setAnsweredResult(correct);
-                          if (correct) {
-                            addScorePoints(10);
-                            confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
-                          }
-                        }}
-                        className={`p-5 rounded-2xl border-2 font-bold text-white transition ${selectedAnswer === idx ? (answeredResult ? 'bg-emerald-600 border-emerald-400' : 'bg-red-600 border-red-400') : 'bg-slate-950 border-cyan-800 hover:bg-cyan-950'}`}
-                      >
-                        {opt}
-                      </button>
-                    ))}
-                  </div>
+                    <h3 className="text-2xl font-black text-white">
+                      {currentQ.question}
+                    </h3>
 
-                  {answeredResult !== null && (
-                    <div className="space-y-4">
-                      <div className={`p-3 rounded-2xl font-bold text-sm ${answeredResult ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}>
-                        {answeredResult ? 'Correto! +10 pts' : 'Incorreto!'}
-                      </div>
-                      <button
-                        onClick={() => {
-                          if (questionIdx + 1 < QUIZ_QUESTIONS.length) {
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {currentQ.options.map((opt: string, idx: number) => (
+                        <button
+                          key={idx}
+                          disabled={answeredResult !== null}
+                          onClick={() => {
+                            setSelectedAnswer(idx);
+                            const correctIndex = typeof currentQ.correctIndex === 'number' ? currentQ.correctIndex : 0;
+                            const correct = idx === correctIndex;
+                            setAnsweredResult(correct);
+                            if (correct) {
+                              addScorePoints(10);
+                              confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
+                            }
+                          }}
+                          className={`p-5 rounded-2xl border-2 font-bold text-white transition ${selectedAnswer === idx ? (answeredResult ? 'bg-emerald-600 border-emerald-400' : 'bg-red-600 border-red-400') : 'bg-slate-950 border-cyan-800 hover:bg-cyan-950'}`}
+                        >
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+
+                    {answeredResult !== null && (
+                      <div className="space-y-4">
+                        <div className={`p-3 rounded-2xl font-bold text-sm ${answeredResult ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}>
+                          {answeredResult ? 'Correto! +10 pts' : 'Incorreto!'}
+                        </div>
+                        <button
+                          onClick={() => {
                             setQuestionIdx(q => q + 1);
                             setSelectedAnswer(null);
                             setAnsweredResult(null);
-                          } else {
-                            alert('Parabéns! Você concluiu o Quiz!');
-                            setStep('arena_hub');
-                          }
-                        }}
-                        className="px-6 py-3 bg-amber-400 text-slate-950 font-black rounded-xl text-sm"
-                      >
-                        Próxima Pergunta ➔
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
+                          }}
+                          className="px-6 py-3 bg-amber-400 text-slate-950 font-black rounded-xl text-sm"
+                        >
+                          Próxima Pergunta ➔
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* VERDADEIRO OU FALSO GAME */}
-              {activeGame === 'verdadeiro_falso' && (
-                <div className="space-y-6">
-                  <div className="inline-block bg-emerald-600/30 border border-emerald-400 text-emerald-300 text-xs font-bold px-3 py-1 rounded-full">
-                    Verdadeiro ou Falso &bull; Afirmação {questionIdx + 1} de {VF_QUESTIONS.length}
-                  </div>
+              {activeGame === 'verdadeiro_falso' && (() => {
+                const customVF = bancoQuestoes.filter(q => q.tipo === 'verdadeiro_falso');
+                const activeVFList = customVF.length > 0 ? customVF : VF_QUESTIONS;
+                const currentVF = activeVFList[questionIdx % activeVFList.length];
 
-                  <h3 className="text-2xl font-black text-white">
-                    "{VF_QUESTIONS[questionIdx].statement}"
-                  </h3>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    {[
-                      { label: 'Verdadeiro', val: true },
-                      { label: 'Falso', val: false }
-                    ].map((item, idx) => (
-                      <button
-                        key={idx}
-                        disabled={answeredResult !== null}
-                        onClick={() => {
-                          const correct = item.val === VF_QUESTIONS[questionIdx].isTrue;
-                          setAnsweredResult(correct);
-                          if (correct) {
-                            addScorePoints(10);
-                            confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
-                          }
-                        }}
-                        className="p-6 rounded-2xl border-2 font-bold text-lg bg-slate-950 border-cyan-800 hover:bg-cyan-950 text-white"
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  {answeredResult !== null && (
-                    <div className="space-y-4">
-                      <div className={`p-3 rounded-2xl font-bold text-sm ${answeredResult ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}>
-                        {answeredResult ? 'Resposta Certa! +10 pts' : 'Resposta Errada!'}
-                      </div>
-                      <button
-                        onClick={() => {
-                          if (questionIdx + 1 < VF_QUESTIONS.length) {
-                            setQuestionIdx(q => q + 1);
-                            setAnsweredResult(null);
-                          } else {
-                            alert('Parabéns! Você concluiu Verdadeiro ou Falso!');
-                            setStep('arena_hub');
-                          }
-                        }}
-                        className="px-6 py-3 bg-amber-400 text-slate-950 font-black rounded-xl text-sm"
-                      >
-                        Próxima Afirmação ➔
-                      </button>
+                return (
+                  <div className="space-y-6">
+                    <div className="inline-block bg-emerald-600/30 border border-emerald-400 text-emerald-300 text-xs font-bold px-3 py-1 rounded-full">
+                      Verdadeiro ou Falso &bull; Afirmação {(questionIdx % activeVFList.length) + 1} de {activeVFList.length}
                     </div>
-                  )}
-                </div>
-              )}
 
-              {/* FORCA GAME */}
-              {activeGame === 'forca' && (
-                <div className="space-y-6">
-                  <div className="inline-block bg-amber-600/30 border border-amber-400 text-amber-300 text-xs font-bold px-3 py-1 rounded-full">
-                    Jogo da Forca &bull; Dica: {FORCA_WORDS[forcaIdx].hint}
-                  </div>
+                    <h3 className="text-2xl font-black text-white">
+                      "{currentVF.statement}"
+                    </h3>
 
-                  <div className="text-4xl font-mono tracking-widest text-amber-400 font-black my-4">
-                    {FORCA_WORDS[forcaIdx].word.split('').map(char => guessedLetters.includes(char) ? char : '_').join(' ')}
-                  </div>
-
-                  <div className="grid grid-cols-6 gap-2 max-w-md mx-auto">
-                    {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(letter => {
-                      const guessed = guessedLetters.includes(letter);
-                      return (
+                    <div className="grid grid-cols-2 gap-4">
+                      {[
+                        { label: 'Verdadeiro', val: true },
+                        { label: 'Falso', val: false }
+                      ].map((item, idx) => (
                         <button
-                          key={letter}
-                          disabled={guessed}
+                          key={idx}
+                          disabled={answeredResult !== null}
                           onClick={() => {
-                            const newGuessed = [...guessedLetters, letter];
-                            setGuessedLetters(newGuessed);
-                            const currentWord = FORCA_WORDS[forcaIdx].word;
-                            const isCorrectLetter = currentWord.includes(letter);
-                            if (isCorrectLetter) {
-                              const wordCompleted = currentWord.split('').every((char: string) => newGuessed.includes(char));
-                              if (wordCompleted) {
-                                addScorePoints(15);
-                                confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
-                              }
+                            const correct = item.val === currentVF.isTrue;
+                            setAnsweredResult(correct);
+                            if (correct) {
+                              addScorePoints(10);
+                              confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
                             }
                           }}
-                          className={`p-3 rounded-xl border font-bold text-sm ${guessed ? 'bg-slate-900 border-slate-800 text-slate-600' : 'bg-slate-950 border-cyan-700 text-white hover:bg-cyan-900'}`}
+                          className="p-6 rounded-2xl border-2 font-bold text-lg bg-slate-950 border-cyan-800 hover:bg-cyan-950 text-white"
                         >
-                          {letter}
+                          {item.label}
                         </button>
-                      );
-                    })}
-                  </div>
+                      ))}
+                    </div>
 
-                  <button
-                    onClick={() => {
-                      if (forcaIdx + 1 < FORCA_WORDS.length) {
+                    {answeredResult !== null && (
+                      <div className="space-y-4">
+                        <div className={`p-3 rounded-2xl font-bold text-sm ${answeredResult ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}>
+                          {answeredResult ? 'Resposta Certa! +10 pts' : 'Resposta Errada!'}
+                        </div>
+                        <button
+                          onClick={() => {
+                            setQuestionIdx(q => q + 1);
+                            setAnsweredResult(null);
+                          }}
+                          className="px-6 py-3 bg-amber-400 text-slate-950 font-black rounded-xl text-sm"
+                        >
+                          Próxima Afirmação ➔
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* FORCA GAME */}
+              {activeGame === 'forca' && (() => {
+                const customForca = bancoQuestoes.filter(q => q.tipo === 'forca');
+                const activeForcaList = customForca.length > 0 ? customForca : FORCA_WORDS;
+                const currentForca = activeForcaList[forcaIdx % activeForcaList.length];
+                const wordStr = (currentForca.word || '').toUpperCase();
+
+                return (
+                  <div className="space-y-6">
+                    <div className="inline-block bg-amber-600/30 border border-amber-400 text-amber-300 text-xs font-bold px-3 py-1 rounded-full">
+                      Jogo da Forca &bull; Dica: {currentForca.hint}
+                    </div>
+
+                    <div className="text-4xl font-mono tracking-widest text-amber-400 font-black my-4">
+                      {wordStr.split('').map((char: string) => guessedLetters.includes(char) ? char : '_').join(' ')}
+                    </div>
+
+                    <div className="grid grid-cols-6 gap-2 max-w-md mx-auto">
+                      {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(letter => {
+                        const guessed = guessedLetters.includes(letter);
+                        return (
+                          <button
+                            key={letter}
+                            disabled={guessed}
+                            onClick={() => {
+                              const newGuessed = [...guessedLetters, letter];
+                              setGuessedLetters(newGuessed);
+                              const isCorrectLetter = wordStr.includes(letter);
+                              if (isCorrectLetter) {
+                                const wordCompleted = wordStr.split('').every((char: string) => newGuessed.includes(char));
+                                if (wordCompleted) {
+                                  addScorePoints(15);
+                                  confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+                                }
+                              }
+                            }}
+                            className={`p-3 rounded-xl border font-bold text-sm ${guessed ? 'bg-slate-900 border-slate-800 text-slate-600' : 'bg-slate-950 border-cyan-700 text-white hover:bg-cyan-900'}`}
+                          >
+                            {letter}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <button
+                      onClick={() => {
                         setForcaIdx(f => f + 1);
                         setGuessedLetters([]);
-                      } else {
-                        alert('Parabéns! Você concluiu a Forca!');
-                        setStep('arena_hub');
-                      }
-                    }}
-                    className="px-6 py-3 bg-amber-400 text-slate-950 font-black rounded-xl text-sm"
-                  >
-                    Próxima Palavra ➔
-                  </button>
-                </div>
-              )}
+                      }}
+                      className="px-6 py-3 bg-amber-400 text-slate-950 font-black rounded-xl text-sm"
+                    >
+                      Próxima Palavra ➔
+                    </button>
+                  </div>
+                );
+              })()}
 
               {/* STOP / ADEDONHA GAME (EM CONSTRUÇÃO) */}
               {activeGame === 'stop_adedonha' && (

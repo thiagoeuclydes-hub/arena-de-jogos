@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit3, Armchair, ArrowLeft, RefreshCw, LogOut, Lock, Unlock, Trophy, Gamepad2, Settings } from 'lucide-react';
+import { Plus, Trash2, Edit3, Armchair, ArrowLeft, RefreshCw, LogOut, Lock, Unlock, Trophy, Gamepad2, Settings, BookOpen, Layers } from 'lucide-react';
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '../firebase';
 
@@ -12,12 +12,32 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Form modal state
+  // Form modal state (Criar / Editar Sala)
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [nome, setNome] = useState('');
   const [pin, setPin] = useState('1234');
   const [numCadeiras, setNumCadeiras] = useState(20);
+
+  // Banco de Questões & Temas State
+  const [showQuestionModal, setShowQuestionModal] = useState(false);
+  const [activeQuestionGame, setActiveQuestionGame] = useState<'forca' | 'verdadeiro_falso' | 'quiz'>('quiz');
+  const [temasList, setTemasList] = useState<string[]>(['BRASIL', 'ALAGOAS', 'CIENCIAS', 'FILME: JACK', 'FILME VINGADORES']);
+  const [selectedTema, setSelectedTema] = useState('BRASIL');
+  const [novoTemaInput, setNovoTemaInput] = useState('');
+  const [editTemaModal, setEditTemaModal] = useState(false);
+  const [temaParaEditar, setTemaParaEditar] = useState('');
+  const [temaEditadoNome, setTemaEditadoNome] = useState('');
+
+  // Form question fields
+  const [qText, setQText] = useState('');
+  const [qOptions, setQOptions] = useState(['', '', '', '']);
+  const [qCorrectIdx, setQCorrectIdx] = useState(0);
+  const [qIsTrue, setQIsTrue] = useState(true);
+  const [qWord, setQWord] = useState('');
+  const [qHint, setQHint] = useState('');
+
+  const [questoesBanco, setQuestoesBanco] = useState<any[]>([]);
 
   useEffect(() => {
     if (!isFirebaseConfigured || !db) {
@@ -26,7 +46,7 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
       return;
     }
 
-    const unsubscribe = onSnapshot(
+    const unsubSalas = onSnapshot(
       collection(db as any, 'salas'),
       (snapshot) => {
         const list: any[] = [];
@@ -43,7 +63,24 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
       }
     );
 
-    return () => unsubscribe();
+    const unsubBanco = onSnapshot(
+      collection(db as any, 'banco_questoes'),
+      (snapshot) => {
+        const list: any[] = [];
+        snapshot.forEach((docSnap) => {
+          list.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        setQuestoesBanco(list);
+      },
+      (err) => {
+        console.error("Erro ao carregar banco de questões:", err);
+      }
+    );
+
+    return () => {
+      unsubSalas();
+      unsubBanco();
+    };
   }, []);
 
   const handleOpenCreate = () => {
@@ -99,6 +136,7 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
           cadeiras,
           jogoLiberado: false,
           jogoAtivo: 'quiz',
+          jogosStatus: { quiz: false, forca: false, verdadeiro_falso: false, jogo_das_cores: false, stop_adedonha: false },
           criadoEm: serverTimestamp()
         });
       }
@@ -220,6 +258,163 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
     }
   };
 
+  // Banco de Questões handlers
+  const handleOpenQuestionModal = (gameType: 'forca' | 'verdadeiro_falso' | 'quiz') => {
+    setActiveQuestionGame(gameType);
+    setShowQuestionModal(true);
+  };
+
+  const handleCreateTema = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!novoTemaInput.trim()) return;
+    const t = novoTemaInput.trim().toUpperCase();
+    if (!temasList.includes(t)) {
+      setTemasList([...temasList, t]);
+      setSelectedTema(t);
+    }
+    setNovoTemaInput('');
+  };
+
+  const handleUpdateTema = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!temaEditadoNome.trim()) return;
+    const novo = temaEditadoNome.trim().toUpperCase();
+    setTemasList(temasList.map(t => t === temaParaEditar ? novo : t));
+    if (selectedTema === temaParaEditar) {
+      setSelectedTema(novo);
+    }
+    setEditTemaModal(false);
+    setTemaParaEditar('');
+    setTemaEditadoNome('');
+  };
+
+  const handleAddQuestion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!db) return;
+    try {
+      let qData: any = { tema: selectedTema, tipo: activeQuestionGame };
+      if (activeQuestionGame === 'quiz') {
+        qData.question = qText;
+        qData.options = qOptions;
+        qData.correctIndex = qCorrectIdx;
+      } else if (activeQuestionGame === 'verdadeiro_falso') {
+        qData.statement = qText;
+        qData.isTrue = qIsTrue;
+      } else if (activeQuestionGame === 'forca') {
+        qData.word = qWord.toUpperCase().trim();
+        qData.hint = qHint;
+      }
+      await addDoc(collection(db as any, 'banco_questoes'), {
+        ...qData,
+        criadoEm: serverTimestamp()
+      });
+      alert('Questão/Palavra adicionada ao banco com sucesso!');
+      setQText('');
+      setQWord('');
+      setQHint('');
+      setQOptions(['', '', '', '']);
+    } catch (err: any) {
+      console.error("Erro ao adicionar questão:", err);
+      alert('Erro ao salvar questão: ' + (err?.message || err));
+    }
+  };
+
+  const handleDeleteQuestion = async (id: string) => {
+    if (!db) return;
+    if (window.confirm('Deseja apagar esta questão do banco?')) {
+      try {
+        await deleteDoc(doc(db as any, 'banco_questoes', id));
+      } catch (err) {
+        console.error("Erro ao apagar questão:", err);
+      }
+    }
+  };
+
+  const handleDownloadTemplate = () => {
+    let csvContent = "";
+    let filename = "";
+    if (activeQuestionGame === 'quiz') {
+      csvContent = "pergunta,opcao1,opcao2,opcao3,opcao4,indice_correto\n\"Qual a capital do Brasil?\",\"Rio de Janeiro\",\"São Paulo\",\"Brasília\",\"Salvador\",2\n\"Qual o maior planeta?\",\"Marte\",\"Júpiter\",\"Vênus\",\"Saturno\",1";
+      filename = `modelo_quiz_${selectedTema.toLowerCase()}.csv`;
+    } else if (activeQuestionGame === 'verdadeiro_falso') {
+      csvContent = "afirmacao,resposta\n\"O Sol é uma estrela.\",true\n\"A Terra é plana.\",false";
+      filename = `modelo_verdadeiro_falso_${selectedTema.toLowerCase()}.csv`;
+    } else if (activeQuestionGame === 'forca') {
+      csvContent = "palavra,dica\n\"MATEMATICA\",\"Estudo dos números\"\n\"HISTORIA\",\"Estudo do passado\"";
+      filename = `modelo_forca_${selectedTema.toLowerCase()}.csv`;
+    }
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleBulkImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !db) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result as string;
+        const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+        if (lines.length < 2) {
+          alert('Arquivo CSV vazio ou inválido.');
+          return;
+        }
+
+        let count = 0;
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i];
+          const match = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(',');
+          const cleanVals = match.map(v => v.replace(/^"|"$/g, '').trim());
+
+          if (activeQuestionGame === 'quiz' && cleanVals.length >= 6) {
+            await addDoc(collection(db as any, 'banco_questoes'), {
+              tema: selectedTema,
+              tipo: 'quiz',
+              question: cleanVals[0],
+              options: [cleanVals[1], cleanVals[2], cleanVals[3], cleanVals[4]],
+              correctIndex: Number(cleanVals[5]) || 0,
+              criadoEm: serverTimestamp()
+            });
+            count++;
+          } else if (activeQuestionGame === 'verdadeiro_falso' && cleanVals.length >= 2) {
+            await addDoc(collection(db as any, 'banco_questoes'), {
+              tema: selectedTema,
+              tipo: 'verdadeiro_falso',
+              statement: cleanVals[0],
+              isTrue: cleanVals[1].toLowerCase() === 'true',
+              criadoEm: serverTimestamp()
+            });
+            count++;
+          } else if (activeQuestionGame === 'forca' && cleanVals.length >= 2) {
+            await addDoc(collection(db as any, 'banco_questoes'), {
+              tema: selectedTema,
+              tipo: 'forca',
+              word: cleanVals[0].toUpperCase(),
+              hint: cleanVals[1],
+              criadoEm: serverTimestamp()
+            });
+            count++;
+          }
+        }
+
+        alert(`Importação em lote concluída! ${count} questões adicionadas ao tema ${selectedTema}.`);
+        e.target.value = '';
+      } catch (err: any) {
+        console.error("Erro na importação em lote:", err);
+        alert('Erro ao processar arquivo CSV: ' + (err?.message || err));
+      }
+    };
+    reader.readAsText(file);
+  };
+
   if (!isFirebaseConfigured) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-gradient-to-b from-[#0b4d32] to-[#042417] min-h-screen text-white">
@@ -286,14 +481,19 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
             </div>
           ))}
 
-          {/* Insert content buttons */}
-          {['INSERIR FORCA', 'INSERIR VERDADERIO OU FALSO', 'INSERIR QUIZ'].map((btnText, idx) => (
+          {/* Insert content buttons (Banco de Questões) */}
+          {[
+            { text: 'INSERIR FORCA', type: 'forca' },
+            { text: 'INSERIR VERDADERIO OU FALSO', type: 'verdadeiro_falso' },
+            { text: 'INSERIR QUIZ', type: 'quiz' }
+          ].map((btn, idx) => (
             <button
               key={idx}
-              onClick={() => alert(`Função ${btnText} pronta para customização!`)}
-              className="bg-gradient-to-r from-slate-200 to-slate-300 hover:from-white hover:to-slate-200 text-slate-900 font-black text-center py-2.5 px-4 rounded-xl shadow-md border border-slate-400 text-xs tracking-wide transition transform hover:scale-101"
+              onClick={() => handleOpenQuestionModal(btn.type as any)}
+              className="bg-gradient-to-r from-slate-200 to-slate-300 hover:from-white hover:to-slate-200 text-slate-900 font-black text-center py-2.5 px-4 rounded-xl shadow-md border border-slate-400 text-xs tracking-wide transition transform hover:scale-101 flex items-center justify-center space-x-2"
             >
-              {btnText}
+              <BookOpen className="w-4 h-4 text-emerald-700" />
+              <span>{btn.text}</span>
             </button>
           ))}
         </div>
@@ -341,12 +541,12 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                   </div>
 
                   {/* PROFESSOR GAMES RELEASE PANEL (LIBERADO / TRANCADO MATCHING REFERENCE) */}
-                  <div className="w-full bg-slate-950/90 border-2 border-emerald-500/40 p-6 rounded-3xl space-y-4 shadow-2xl">
+                  <div className="w-full lg:w-auto bg-slate-950/90 border-2 border-emerald-500/40 p-5 rounded-3xl space-y-4 shadow-2xl">
                     <h4 className="text-xs font-black text-emerald-300 uppercase tracking-wider mb-2">
-                      🎛️ Painel de Controle de Jogos (Toque para Liberar ou Trancar):
+                      🎛️ Painel de Jogos (Liberar / Trancar):
                     </h4>
 
-                    <div className="grid grid-cols-1 gap-3">
+                    <div className="grid grid-cols-1 gap-2.5">
                       {[
                         { id: 'jogo_das_cores', name: 'JOGO DAS CORES' },
                         { id: 'verdadeiro_falso', name: 'VERDADEIRO OU FALSO' },
@@ -358,22 +558,14 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                         const isLiberado = statusMap[game.id] === true;
 
                         return (
-                          <div key={game.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#052c1e] p-3 rounded-2xl border border-emerald-800">
-                            {/* Game Name Button */}
-                            <div
-                              onClick={() => handleChangeJogoAtivo(sala.id, game.id)}
-                              className={`bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 font-black py-2.5 px-6 rounded-xl shadow-md text-sm text-center tracking-wide flex-1 cursor-pointer transition ${jogoAtivo === game.id ? 'ring-4 ring-yellow-400 scale-101' : 'opacity-90'}`}
-                              title="Clique para selecionar como Jogo Ativo"
-                            >
-                              {game.name} {jogoAtivo === game.id ? '⭐ (Selecionado)' : ''}
-                            </div>
+                          <div key={game.id} className="flex items-center justify-between gap-3 bg-[#052c1e] p-2.5 rounded-xl border border-emerald-800">
+                            <span className="text-xs font-black text-white px-2 truncate">{game.name}</span>
 
-                            {/* Liberado / Trancado buttons */}
-                            <div className="flex items-center space-x-2 justify-end">
+                            <div className="flex items-center space-x-1.5">
                               <button
                                 type="button"
                                 onClick={() => handleSetGameStatus(sala.id, game.id, true)}
-                                className={`px-6 py-2.5 rounded-xl font-black text-xs uppercase transition shadow-lg ${isLiberado ? 'bg-gradient-to-r from-emerald-600 to-green-500 text-white ring-2 ring-emerald-300 scale-105' : 'bg-emerald-950/80 text-emerald-400/60 hover:bg-emerald-900'}`}
+                                className={`px-4 py-1.5 rounded-lg font-black text-[10px] uppercase transition shadow ${isLiberado ? 'bg-emerald-500 text-slate-950 ring-2 ring-white scale-105' : 'bg-emerald-950 text-emerald-400/50 hover:bg-emerald-900'}`}
                               >
                                 liberado
                               </button>
@@ -381,7 +573,7 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                               <button
                                 type="button"
                                 onClick={() => handleSetGameStatus(sala.id, game.id, false)}
-                                className={`px-6 py-2.5 rounded-xl font-black text-xs uppercase transition shadow-lg ${!isLiberado ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white ring-2 ring-red-300 scale-105' : 'bg-red-950/80 text-red-400/60 hover:bg-red-900'}`}
+                                className={`px-4 py-1.5 rounded-lg font-black text-[10px] uppercase transition shadow ${!isLiberado ? 'bg-red-600 text-white ring-2 ring-white scale-105' : 'bg-red-950 text-red-400/50 hover:bg-red-900'}`}
                               >
                                 trancado
                               </button>
@@ -613,6 +805,294 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                 <button
                   type="submit"
                   className="flex-1 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black shadow-xl transition"
+                >
+                  Salvar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Banco de Questões por Tema */}
+      {showQuestionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-[#052c1e] border-2 border-emerald-500/50 rounded-3xl p-6 md:p-8 max-w-2xl w-full shadow-2xl space-y-6 my-8">
+            <div className="flex items-center justify-between pb-4 border-b border-emerald-800">
+              <div>
+                <span className="text-xs font-black text-amber-400 uppercase tracking-widest">Banco de Questões</span>
+                <h3 className="text-2xl font-black text-white mt-0.5">
+                  Gerenciar &bull; {activeQuestionGame === 'quiz' ? 'Quiz' : activeQuestionGame === 'verdadeiro_falso' ? 'Verdadeiro ou Falso' : 'Jogo da Forca'}
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowQuestionModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-950 border border-emerald-500/30 text-emerald-300 font-bold text-xs"
+              >
+                Fechar ✕
+              </button>
+            </div>
+
+            {/* Temas Selector & Manager */}
+            <div className="space-y-4 bg-slate-950/80 p-5 rounded-2xl border border-emerald-900">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center space-x-2">
+                  <label className="text-xs font-black uppercase tracking-wider text-emerald-300">Tema Selecionado:</label>
+                  <span className="text-xs font-black bg-amber-400 text-slate-950 px-2.5 py-1 rounded-lg">{selectedTema}</span>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowQuestionModal(false)}
+                    className="px-3 py-1.5 rounded-xl bg-slate-900 border border-emerald-500/40 text-emerald-300 font-bold text-xs hover:bg-slate-800"
+                  >
+                    Fechar ✕
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-emerald-900/60">
+                <form onSubmit={handleCreateTema} className="flex items-center space-x-2 w-full sm:w-auto">
+                  <input
+                    type="text"
+                    placeholder="Novo tema (ex: HISTORIA)"
+                    value={novoTemaInput}
+                    onChange={(e) => setNovoTemaInput(e.target.value)}
+                    className="bg-slate-900 border border-emerald-500/40 rounded-xl px-3 py-1.5 text-xs text-white placeholder-emerald-800 focus:outline-none font-bold"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs"
+                  >
+                    + Criar Tema
+                  </button>
+                </form>
+
+                {/* Excel / CSV Templates & Bulk Import */}
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={handleDownloadTemplate}
+                    className="px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-black text-xs flex items-center space-x-1"
+                    title="Baixar modelo em CSV/Excel para carregar em lotes"
+                  >
+                    <span>📊 Baixar Modelo Excel</span>
+                  </button>
+
+                  <label className="px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer flex items-center space-x-1">
+                    <span>📂 Importar Lotes</span>
+                    <input
+                      type="file"
+                      accept=".csv,.txt"
+                      onChange={handleBulkImport}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2 pt-2">
+                {temasList.map(tema => (
+                  <div key={tema} className="flex items-center space-x-1">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTema(tema)}
+                      className={`px-4 py-2 rounded-xl font-black text-xs transition border ${selectedTema === tema ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-lg scale-105' : 'bg-[#052c1e] text-emerald-300 border-emerald-800 hover:bg-[#073824]'}`}
+                    >
+                      {tema}
+                    </button>
+                    {['BRASIL', 'ALAGOAS', 'CIENCIAS', 'FILME: JACK', 'FILME VINGADORES'].indexOf(tema) === -1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditTemaModal(true);
+                          setTemaParaEditar(tema);
+                          setTemaEditadoNome(tema);
+                        }}
+                        className="p-1.5 rounded-lg bg-blue-600/30 text-blue-300 hover:bg-blue-600/50 text-[10px]"
+                        title="Editar Tema"
+                      >
+                        <Edit3 className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Add Question Form */}
+            <form onSubmit={handleAddQuestion} className="space-y-4 bg-slate-950/60 p-5 rounded-2xl border border-emerald-900/60">
+              <h4 className="text-sm font-black text-amber-400">Adicionar Nova Questão para o tema: <span className="underline">{selectedTema}</span></h4>
+
+              {activeQuestionGame === 'forca' && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-emerald-300 mb-1">Palavra Secreta</label>
+                    <input
+                      type="text"
+                      required
+                      value={qWord}
+                      onChange={(e) => setQWord(e.target.value)}
+                      placeholder="Ex: GEOGRAFIA"
+                      className="w-full bg-slate-950 border border-emerald-500/40 rounded-xl px-4 py-2.5 text-white placeholder-emerald-900 font-mono uppercase focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-emerald-300 mb-1">Dica</label>
+                    <input
+                      type="text"
+                      required
+                      value={qHint}
+                      onChange={(e) => setQHint(e.target.value)}
+                      placeholder="Ex: Estudo da Terra e mapas"
+                      className="w-full bg-slate-950 border border-emerald-500/40 rounded-xl px-4 py-2.5 text-white placeholder-emerald-900 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {activeQuestionGame === 'verdadeiro_falso' && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-emerald-300 mb-1">Afirmação / Declaração</label>
+                    <input
+                      type="text"
+                      required
+                      value={qText}
+                      onChange={(e) => setQText(e.target.value)}
+                      placeholder="Ex: Alagoas é banhada pelo Oceano Atlântico."
+                      className="w-full bg-slate-950 border border-emerald-500/40 rounded-xl px-4 py-2.5 text-white placeholder-emerald-900 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-emerald-300 mb-1">Resposta Correta</label>
+                    <select
+                      value={String(qIsTrue)}
+                      onChange={(e) => setQIsTrue(e.target.value === 'true')}
+                      className="w-full bg-slate-950 border border-emerald-500/40 rounded-xl px-4 py-2.5 text-white font-bold focus:outline-none"
+                    >
+                      <option value="true">Verdadeiro</option>
+                      <option value="false">Falso</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {activeQuestionGame === 'quiz' && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-emerald-300 mb-1">Pergunta do Quiz</label>
+                    <input
+                      type="text"
+                      required
+                      value={qText}
+                      onChange={(e) => setQText(e.target.value)}
+                      placeholder="Ex: Qual a capital de Alagoas?"
+                      className="w-full bg-slate-950 border border-emerald-500/40 rounded-xl px-4 py-2.5 text-white placeholder-emerald-900 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {qOptions.map((opt, oIdx) => (
+                      <div key={oIdx}>
+                        <label className="block text-[10px] font-bold text-emerald-400 mb-1">Opção {oIdx + 1} {oIdx === qCorrectIdx ? '(Correta)' : ''}</label>
+                        <input
+                          type="text"
+                          required
+                          value={opt}
+                          onChange={(e) => {
+                            const newOpts = [...qOptions];
+                            newOpts[oIdx] = e.target.value;
+                            setQOptions(newOpts);
+                          }}
+                          placeholder={`Opção ${oIdx + 1}`}
+                          className="w-full bg-slate-950 border border-emerald-500/40 rounded-xl px-3 py-2 text-white text-xs focus:outline-none"
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-emerald-300 mb-1">Índice da Resposta Correta (0 a 3)</label>
+                    <select
+                      value={qCorrectIdx}
+                      onChange={(e) => setQCorrectIdx(Number(e.target.value))}
+                      className="w-full bg-slate-950 border border-emerald-500/40 rounded-xl px-4 py-2.5 text-white font-bold focus:outline-none"
+                    >
+                      <option value={0}>Opção 1</option>
+                      <option value={1}>Opção 2</option>
+                      <option value={2}>Opção 3</option>
+                      <option value={3}>Opção 4</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs uppercase shadow-lg transition"
+              >
+                + Adicionar ao Banco de Questões
+              </button>
+            </form>
+
+            {/* List of existing questions in this theme */}
+            <div className="space-y-3 bg-slate-950/80 p-5 rounded-2xl border border-emerald-900 max-h-64 overflow-y-auto">
+              <h4 className="text-xs font-black uppercase text-emerald-300">Questões cadastradas no tema "{selectedTema}":</h4>
+              {questoesBanco.filter(q => q.tema === selectedTema && q.tipo === activeQuestionGame).length === 0 ? (
+                <div className="text-xs text-emerald-300/50 text-center py-6">Nenhuma questão cadastrada neste tema ainda.</div>
+              ) : (
+                <div className="space-y-2">
+                  {questoesBanco
+                    .filter(q => q.tema === selectedTema && q.tipo === activeQuestionGame)
+                    .map(q => (
+                      <div key={q.id} className="flex items-center justify-between bg-[#052c1e] p-3 rounded-xl border border-emerald-800 text-xs">
+                        <div className="truncate pr-4">
+                          <strong className="text-amber-400 block">{q.question || q.statement || q.word}</strong>
+                          <span className="text-[10px] text-emerald-300/70">{q.hint || (q.options ? q.options.join(', ') : (q.isTrue ? 'Verdadeiro' : 'Falso'))}</span>
+                        </div>
+                        <button
+                          onClick={() => handleDeleteQuestion(q.id)}
+                          className="p-2 rounded-lg bg-red-600/20 hover:bg-red-600/40 text-red-300"
+                          title="Apagar Questão"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Modal Editar Tema */}
+      {editTemaModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+          <div className="bg-[#052c1e] border border-emerald-500/40 rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4">
+            <h4 className="text-lg font-black text-white text-center">Editar Tema</h4>
+            <form onSubmit={handleUpdateTema} className="space-y-3">
+              <input
+                type="text"
+                required
+                value={temaEditadoNome}
+                onChange={(e) => setTemaEditadoNome(e.target.value)}
+                className="w-full bg-slate-950 border border-emerald-500/40 rounded-xl px-4 py-2.5 text-white font-bold uppercase focus:outline-none"
+              />
+              <div className="flex space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setEditTemaModal(false)}
+                  className="flex-1 py-2 rounded-xl bg-slate-950 border border-emerald-500/30 text-emerald-300 font-bold text-xs"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 rounded-xl bg-amber-400 text-slate-950 font-black text-xs uppercase"
                 >
                   Salvar
                 </button>
