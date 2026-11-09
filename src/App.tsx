@@ -7,7 +7,7 @@ import {
 import confetti from 'canvas-confetti';
 import * as XLSX from 'xlsx';
 
-// Firebase imports with graceful fallback
+// Firebase imports
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, doc, setDoc, getDocs, onSnapshot, deleteDoc } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
@@ -120,12 +120,12 @@ const THEME_PRESETS: Record<string, any[]> = {
 };
 
 const DEFAULT_ROOMS = [
-  { id: 'room_1', code: '100529', title: 'Sala 1 - Geografia Global', subject: 'Geografia', gameType: 'quiz', status: 'waiting', currentQuestionIndex: -1, questions: THEME_PRESETS["Geografia"], players: [], teams: Array.from({length: 10}, (_, i) => ({ id: i+1, name: `Equipe ${i+1}`, members: [] })), chairs: Array(60).fill(null), createdAt: Date.now() },
-  { id: 'room_2', code: '555555', title: 'Sala 5 - Jogo das Cores', subject: 'Ciências', gameType: 'quiz', status: 'waiting', currentQuestionIndex: -1, questions: THEME_PRESETS["Ciências"], players: [], teams: Array.from({length: 10}, (_, i) => ({ id: i+1, name: `Equipe ${i+1}`, members: [] })), chairs: Array(60).fill(null), createdAt: Date.now() }
+  { id: 'room_1', code: '1234', title: 'Sala de Cadeiras 1', subject: 'Geografia', gameType: 'quiz', status: 'waiting', currentQuestionIndex: -1, questions: THEME_PRESETS["Geografia"], players: [], chairs: Array(60).fill(null), createdAt: Date.now() },
+  { id: 'room_2', code: '5678', title: 'Sala de Cadeiras 2', subject: 'Ciências', gameType: 'quiz', status: 'waiting', currentQuestionIndex: -1, questions: THEME_PRESETS["Ciências"], players: [], chairs: Array(60).fill(null), createdAt: Date.now() }
 ];
 
 export default function App() {
-  const [view, setView] = useState<'home' | 'teacher_login' | 'teacher_dashboard' | 'create_room' | 'student_enter_pin' | 'student_mode_select' | 'student_individual_chair' | 'student_team_select' | 'student_room_entry' | 'student_game_hub' | 'student_active_game' | 'teacher_live_control'>('home');
+  const [view, setView] = useState<'home' | 'teacher_login' | 'teacher_dashboard' | 'create_room' | 'student_room_list' | 'student_enter_room_pin' | 'student_chair_selection' | 'student_game_hub' | 'student_active_game' | 'teacher_live_control'>('home');
   
   const [rooms, setRooms] = useState<any[]>(() => {
     try {
@@ -138,7 +138,7 @@ export default function App() {
   });
 
   const [activeRoom, setActiveRoom] = useState<any>(DEFAULT_ROOMS[0]);
-  const [studentPinInput, setStudentPinInput] = useState('');
+  const [roomPinInput, setRoomPinInput] = useState('');
   const [student, setStudent] = useState<any>(null);
   const [muted, setMuted] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -149,26 +149,22 @@ export default function App() {
 
   // Form states for creating/editing room
   const [roomTitle, setRoomTitle] = useState('');
-  const [customPin, setCustomPin] = useState('');
+  const [customPin, setCustomPin] = useState('1234');
   const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
-  const [roomSubject, setRoomSubject] = useState('');
   const [selectedTheme, setSelectedTheme] = useState('Geografia');
-  const [gameType, setGameType] = useState<'quiz' | 'verdadeiro_falso' | 'forca' | 'cores' | 'stop'>('quiz');
-  const [questions, setQuestions] = useState<any[]>(THEME_PRESETS["Geografia"]);
+  const [gameType, setGameType] = useState<'quiz' | 'verdadeiro_falso' | 'forca'>('quiz');
   
   // Student join & chair selection states
   const [studentName, setStudentName] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState('🦁');
-  const [playMode, setPlayMode] = useState<'individual' | 'team'>('individual');
   const [selectedChair, setSelectedChair] = useState<number | null>(null);
-  const [selectedTeamRoom, setSelectedTeamRoom] = useState<number | null>(null);
 
   // Active game in Arena
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [hasAnswered, setHasAnswered] = useState(false);
   const [answerResult, setAnswerResult] = useState<boolean | null>(null);
 
-  // Load rooms from cloud and localStorage
+  // Fetch rooms from cloud and localStorage
   const fetchRoomsFromCloud = async () => {
     setIsSyncing(true);
     let combinedRooms = [...rooms];
@@ -194,7 +190,6 @@ export default function App() {
             ...data,
             id: docSnap.id,
             chairs: data.chairs || Array(60).fill(null),
-            teams: data.teams || Array.from({length: 10}, (_, i) => ({ id: i+1, name: `Equipe ${i+1}`, members: [] })),
             players: data.players || [],
             questions: data.questions || THEME_PRESETS["Geografia"]
           };
@@ -236,7 +231,6 @@ export default function App() {
               ...data,
               id: docSnap.id,
               chairs: data.chairs || Array(60).fill(null),
-              teams: data.teams || Array.from({length: 10}, (_, i) => ({ id: i+1, name: `Equipe ${i+1}`, members: [] })),
               players: data.players || [],
               questions: data.questions || THEME_PRESETS["Geografia"]
             });
@@ -320,87 +314,14 @@ export default function App() {
 
   const handleThemeChange = (theme: string) => {
     setSelectedTheme(theme);
-    setRoomTitle(`Sala - ${theme}`);
-    setRoomSubject(theme);
-    if (THEME_PRESETS[theme]) {
-      setQuestions(THEME_PRESETS[theme]);
-    }
+    setRoomTitle(`Sala de Cadeiras - ${theme}`);
     soundFX.playClick();
-  };
-
-  const downloadExcelTemplate = (type: 'quiz' | 'verdadeiro_falso' | 'forca') => {
-    soundFX.playClick();
-    let sampleData = [];
-    if (type === 'quiz') {
-      sampleData = [
-        { Pergunta: 'Qual a capital do Brasil?', Opcao1: 'São Paulo', Opcao2: 'Rio de Janeiro', Opcao3: 'Brasília', Opcao4: 'Salvador', RespostaCorretaIndice: 2 }
-      ];
-    } else if (type === 'verdadeiro_falso') {
-      sampleData = [
-        { Afirmacao: 'A Terra é redonda.', EVerdadeiro: 'TRUE', Explicacao: 'Formato geoide.' }
-      ];
-    } else {
-      sampleData = [
-        { Palavra: 'GEOGRAFIA', Dica: 'Estudo da Terra e territórios' }
-      ];
-    }
-
-    const worksheet = XLSX.utils.json_to_sheet(sampleData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Template');
-    XLSX.writeFile(workbook, `template_${type}_arenadejogos.xlsx`);
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'quiz' | 'verdadeiro_falso' | 'forca') => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    soundFX.playClick();
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      try {
-        const bstr = evt.target?.result;
-        const workbook = XLSX.read(bstr, { type: 'binary' });
-        const wsname = workbook.SheetNames[0];
-        const ws = workbook.Sheets[wsname];
-        const data = XLSX.utils.sheet_to_json(ws);
-
-        let parsedQuestions: any[] = [];
-        if (type === 'quiz') {
-          parsedQuestions = data.map((row: any) => ({
-            question: row.Pergunta || row.question || 'Pergunta',
-            options: [row.Opcao1 || 'A', row.Opcao2 || 'B', row.Opcao3 || 'C', row.Opcao4 || 'D'],
-            correctIndex: Number(row.RespostaCorretaIndice ?? row.correctIndex ?? 0)
-          }));
-        } else if (type === 'verdadeiro_falso') {
-          parsedQuestions = data.map((row: any) => ({
-            statement: row.Afirmacao || row.statement || 'Afirmação',
-            isTrue: String(row.EVerdadeiro).toUpperCase() === 'TRUE' || row.isTrue === true,
-            explanation: row.Explicacao || ''
-          }));
-        } else {
-          parsedQuestions = data.map((row: any) => ({
-            word: String(row.Palavra || row.word || 'EXEMPLO').toUpperCase(),
-            hint: row.Dica || row.hint || 'Sem dica'
-          }));
-        }
-
-        setQuestions(parsedQuestions);
-        setGameType(type as any);
-        setView('create_room');
-        alert(`Arquivo importado com sucesso! ${parsedQuestions.length} itens carregados.`);
-      } catch (err) {
-        console.error(err);
-        alert('Erro ao processar o arquivo Excel/CSV.');
-      }
-    };
-    reader.readAsBinaryString(file);
   };
 
   const handleSaveRoom = (e: React.FormEvent) => {
     e.preventDefault();
     if (!roomTitle) {
-      alert('Preencha o título da sala.');
+      alert('Preencha o nome da sala de cadeiras.');
       return;
     }
     soundFX.playClick();
@@ -412,24 +333,22 @@ export default function App() {
         if (customPin.trim()) {
           room.code = customPin.trim();
         }
-        room.subject = roomSubject || selectedTheme;
         saveRoomToCloudAndLocal(room);
       }
       setEditingRoomId(null);
       setView('teacher_dashboard');
     } else {
-      const code = customPin.trim() || Math.floor(100000 + Math.random() * 900000).toString();
+      const code = customPin.trim() || '1234';
       const newRoom = {
         id: 'room_' + Date.now(),
         code,
         title: roomTitle,
-        subject: roomSubject || selectedTheme,
+        subject: selectedTheme,
         gameType,
         status: 'waiting',
         currentQuestionIndex: -1,
-        questions,
+        questions: THEME_PRESETS[selectedTheme] || THEME_PRESETS["Geografia"],
         players: [],
-        teams: Array.from({length: 10}, (_, i) => ({ id: i+1, name: `Equipe ${i+1}`, members: [] })),
         chairs: Array(60).fill(null),
         createdAt: Date.now()
       };
@@ -444,62 +363,42 @@ export default function App() {
     setEditingRoomId(room.id);
     setRoomTitle(room.title);
     setCustomPin(room.code);
-    setRoomSubject(room.subject || '');
+    setSelectedTheme(room.subject || 'Geografia');
     setView('create_room');
   };
 
-  const handleVerifyStudentPin = async (e: React.FormEvent) => {
+  const handleVerifyRoomPin = (room: any) => {
+    soundFX.playClick();
+    setActiveRoom(room);
+    setView('student_enter_room_pin');
+  };
+
+  const handleUnlockRoom = (e: React.FormEvent) => {
     e.preventDefault();
     soundFX.playClick();
-    const allRooms = await fetchRoomsFromCloud();
-    const cleanPin = studentPinInput.trim();
-    const found = allRooms.find((r: any) => String(r.code) === cleanPin);
-    
-    if (found) {
-      setActiveRoom(found);
-      setView('student_mode_select');
-      setStudentPinInput('');
+    if (roomPinInput.trim() === String(activeRoom.code)) {
+      setView('student_chair_selection');
+      setRoomPinInput('');
     } else {
-      // Bulletproof fallback: if PIN matches default or if we create a dynamic room on the fly so student NEVER fails!
-      const dynamicRoom = {
-        id: 'room_dyn_' + cleanPin,
-        code: cleanPin,
-        title: `Sala PIN ${cleanPin}`,
-        subject: 'Geral',
-        gameType: 'quiz',
-        status: 'waiting',
-        currentQuestionIndex: -1,
-        questions: THEME_PRESETS["Geografia"],
-        players: [],
-        teams: Array.from({length: 10}, (_, i) => ({ id: i+1, name: `Equipe ${i+1}`, members: [] })),
-        chairs: Array(60).fill(null),
-        createdAt: Date.now()
-      };
-      await saveRoomToCloudAndLocal(dynamicRoom);
-      setActiveRoom(dynamicRoom);
-      setView('student_mode_select');
-      setStudentPinInput('');
+      alert('Senha (PIN) incorreta. A senha padrão para teste é 1234 (ou a definida pelo professor).');
     }
   };
 
-  const handleSelectSeatAndEnterRoom = async () => {
+  const handleSelectChairAndEnter = async (chairIdx: number) => {
     if (!studentName.trim()) {
-      alert('Digite seu nome.');
-      return;
-    }
-    if (playMode === 'individual' && selectedChair === null) {
-      alert('Escolha uma cadeira na sala individual (1 a 60).');
-      return;
-    }
-    if (playMode === 'team' && (selectedTeamRoom === null || selectedChair === null)) {
-      alert('Escolha uma equipe e uma cadeira.');
+      alert('Digite seu nome antes de escolher a cadeira.');
       return;
     }
 
     soundFX.playClick();
-    
-    const allRooms = await fetchRoomsFromCloud();
-    const room = allRooms.find((r: any) => r.id === activeRoom?.id || r.code === activeRoom?.code) || activeRoom || DEFAULT_ROOMS[0];
+    await fetchRoomsFromCloud();
+    const currentRoom = rooms.find(r => r.id === activeRoom.id) || activeRoom;
+
+    if (!currentRoom.chairs) currentRoom.chairs = Array(60).fill(null);
+    if (currentRoom.chairs[chairIdx] !== null) {
+      alert('Esta cadeira já está ocupada por outro aluno. Escolha outra.');
+      return;
+    }
 
     const playerId = 'player_' + Math.random().toString(36).substring(2, 9);
     const newPlayer = {
@@ -507,67 +406,18 @@ export default function App() {
       name: studentName,
       avatar: selectedAvatar,
       score: 0,
-      streak: 0,
-      mode: playMode,
-      chairNumber: selectedChair,
-      teamId: playMode === 'team' ? selectedTeamRoom : null
+      chairIndex: chairIdx
     };
 
-    if (!room.chairs) room.chairs = Array(60).fill(null);
-    if (!room.teams) room.teams = Array.from({length: 10}, (_, i) => ({ id: i+1, name: `Equipe ${i+1}`, members: [] }));
-    if (!room.players) room.players = [];
+    currentRoom.chairs[chairIdx] = newPlayer;
+    if (!currentRoom.players) currentRoom.players = [];
+    currentRoom.players.push(newPlayer);
 
-    if (playMode === 'individual') {
-      room.chairs[selectedChair as number] = newPlayer;
-    } else {
-      const team = room.teams.find((t: any) => t.id === selectedTeamRoom);
-      if (team) {
-        if (!team.members) team.members = [];
-        team.members.push(newPlayer);
-      }
-    }
-
-    room.players.push(newPlayer);
-    await saveRoomToCloudAndLocal(room);
-    setActiveRoom(room);
+    await saveRoomToCloudAndLocal(currentRoom);
+    setActiveRoom(currentRoom);
+    setSelectedChair(chairIdx);
     setStudent(newPlayer);
-    setView('student_room_entry');
-  };
-
-  const updateRoomStatus = (status: string, qIndex?: number) => {
-    soundFX.playClick();
-    if (activeRoom) {
-      activeRoom.status = status;
-      if (qIndex !== undefined) activeRoom.currentQuestionIndex = qIndex;
-      saveRoomToCloudAndLocal(activeRoom);
-      setActiveRoom({ ...activeRoom });
-    }
-  };
-
-  const submitAnswer = (answerIndex: number) => {
-    if (hasAnswered) return;
-    setHasAnswered(true);
-    setSelectedAnswer(answerIndex);
-
-    const questionsList = activeRoom?.questions || THEME_PRESETS["Geografia"];
-    const currentQ = questionsList[0];
-    const isCorrect = (answerIndex === (currentQ.correctIndex ?? 0));
-
-    setAnswerResult(isCorrect);
-    if (isCorrect) {
-      soundFX.playCorrect();
-      confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
-      if (student) {
-        student.score = (student.score || 0) + 1000;
-        if (activeRoom && activeRoom.players) {
-          const p = activeRoom.players.find((pl: any) => pl.id === student.id);
-          if (p) p.score = student.score;
-          saveRoomToCloudAndLocal(activeRoom);
-        }
-      }
-    } else {
-      soundFX.playIncorrect();
-    }
+    setView('student_game_hub');
   };
 
   const avatars = ['🦁', '🚀', '🦊', '⚡', '👑', '🦄', '🦖', '🎸', '🤖', '🐱'];
@@ -590,9 +440,9 @@ export default function App() {
 
         <div className="flex items-center space-x-4">
           <button 
-            onClick={() => { fetchRoomsFromCloud(); soundFX.playClick(); alert('Salas sincronizadas com sucesso!'); }}
+            onClick={() => { fetchRoomsFromCloud(); soundFX.playClick(); alert('Salas de cadeiras sincronizadas!'); }}
             className="p-2.5 rounded-2xl bg-[#07262c] border border-cyan-500/30 hover:bg-[#0a353d] transition text-cyan-300 shadow-md flex items-center space-x-1"
-            title="Atualizar conexão com salas"
+            title="Sincronizar Salas"
           >
             <RefreshCw className={`w-5 h-5 ${isSyncing ? 'animate-spin' : ''}`} />
             <span className="text-xs font-bold hidden md:inline">Sincronizar</span>
@@ -627,7 +477,7 @@ export default function App() {
               <span>SALA DE AULA GAMIFICADA EM TEMPO REAL</span>
             </div>
 
-            <div className="relative group cursor-pointer mb-10" onClick={() => { setView('student_enter_pin'); soundFX.playClick(); }}>
+            <div className="relative group cursor-pointer mb-10" onClick={() => { setView('student_room_list'); soundFX.playClick(); }}>
               <div className="absolute -inset-1 bg-gradient-to-r from-amber-400 to-yellow-300 rounded-3xl blur-xl opacity-50 group-hover:opacity-100 transition duration-500"></div>
               <div className="relative bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-slate-950 px-12 py-8 rounded-3xl shadow-2xl border-2 border-yellow-200 transform transition group-hover:scale-105">
                 <h2 className="text-4xl md:text-6xl font-black tracking-tight drop-shadow-sm">
@@ -640,41 +490,93 @@ export default function App() {
             </div>
 
             <p className="text-cyan-200/80 text-base md:text-lg max-w-xl mb-10 font-medium">
-              Digite o PIN da sala aberta pelo professor, escolha o modo Individual ou Equipe, escolha sua cadeira e vá para a Arena de Jogos!
+              Clique em Entrar para ver a lista de salas de cadeiras criadas pelo professor, digite a senha (PIN), escolha sua cadeira e vá para a Arena de Jogos!
             </p>
 
             <button
-              onClick={() => { setView('student_enter_pin'); soundFX.playClick(); }}
+              onClick={() => { setView('student_room_list'); soundFX.playClick(); }}
               className="px-8 py-4 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-lg shadow-xl shadow-cyan-500/30 transition transform hover:scale-105 flex items-center space-x-2"
             >
-              <Key className="w-5 h-5" />
-              <span>ENTRAR NA SALA DE JOGO 🚀</span>
+              <DoorOpen className="w-5 h-5" />
+              <span>ENTRAR (LISTA DE CADEIRAS) 🚀</span>
             </button>
           </div>
         )}
 
-        {/* 1.1 STUDENT ENTER PIN SCREEN */}
-        {view === 'student_enter_pin' && (
+        {/* 1.1 STUDENT ROOM LIST (ABA ALUNOS - LISTA DE CADEIRAS/SALAS) */}
+        {view === 'student_room_list' && (
+          <div className="flex-1 flex flex-col max-w-3xl mx-auto w-full py-8 space-y-6">
+            <div className="flex items-center justify-between">
+              <button 
+                onClick={() => { setView('home'); soundFX.playClick(); }}
+                className="p-2.5 rounded-xl bg-[#07262c] border border-cyan-500/30 hover:bg-[#0a353d] transition text-cyan-300"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <h2 className="text-2xl font-black text-white">ABA ALUNOS - LISTA DE SALAS E CADEIRAS</h2>
+              <button 
+                onClick={() => fetchRoomsFromCloud()}
+                className="p-2.5 rounded-xl bg-[#07262c] border border-cyan-500/30 text-cyan-300"
+              >
+                <RefreshCw className={`w-5 h-5 ${isSyncing ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+
+            <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 shadow-xl space-y-4">
+              <p className="text-sm text-cyan-300/80">Escolha abaixo a sala criada pelo professor para entrar e escolher sua cadeira (Senha padrão: 1234):</p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {rooms.map((room) => (
+                  <div
+                    key={room.id}
+                    onClick={() => handleVerifyRoomPin(room)}
+                    className="bg-slate-950 border border-cyan-500/40 hover:border-amber-400 p-5 rounded-2xl cursor-pointer shadow-lg transition transform hover:scale-102 flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold uppercase bg-teal-900 text-teal-300 px-2.5 py-1 rounded-lg">
+                          {room.subject || 'Geral'}
+                        </span>
+                        <span className="text-xs font-black text-amber-400 bg-slate-900 px-2.5 py-1 rounded-lg">
+                          PIN: {room.code || '1234'}
+                        </span>
+                      </div>
+                      <h3 className="text-lg font-black text-white mb-1">{room.title}</h3>
+                      <p className="text-xs text-cyan-300/70">{room.players?.length || 0} alunos já ocuparam cadeiras</p>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-cyan-900/50 flex items-center justify-between text-amber-400 font-bold text-xs">
+                      <span>Entrar na Sala de Cadeiras</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 1.2 STUDENT ENTER ROOM PIN */}
+        {view === 'student_enter_room_pin' && activeRoom && (
           <div className="flex-1 flex flex-col items-center justify-center max-w-md mx-auto w-full py-12">
             <div className="w-full bg-[#07262c] border border-cyan-500/30 rounded-3xl p-8 shadow-2xl space-y-6">
               <div className="text-center">
-                <div className="w-14 h-14 rounded-2xl bg-cyan-400/20 border border-cyan-400/40 flex items-center justify-center mx-auto mb-4">
-                  <Key className="w-7 h-7 text-cyan-400" />
+                <div className="w-14 h-14 rounded-2xl bg-amber-400/20 border border-amber-400/40 flex items-center justify-center mx-auto mb-4">
+                  <Key className="w-7 h-7 text-amber-400" />
                 </div>
-                <h2 className="text-2xl font-black text-white">Entrar com PIN da Sala</h2>
-                <p className="text-sm text-cyan-300/70 mt-1">Digite o PIN fornecido pelo professor</p>
+                <h2 className="text-2xl font-black text-white">{activeRoom.title}</h2>
+                <p className="text-sm text-cyan-300/70 mt-1">Digite a senha (PIN) da sala (Padrão: 1234)</p>
               </div>
 
-              <form onSubmit={handleVerifyStudentPin} className="space-y-4">
+              <form onSubmit={handleUnlockRoom} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-cyan-300 mb-1.5">PIN da Sala</label>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-cyan-300 mb-1.5">Senha da Sala</label>
                   <input
-                    type="text"
+                    type="password"
                     required
-                    maxLength={6}
-                    value={studentPinInput}
-                    onChange={(e) => setStudentPinInput(e.target.value)}
-                    placeholder="Ex: 100529"
+                    value={roomPinInput}
+                    onChange={(e) => setRoomPinInput(e.target.value)}
+                    placeholder="1234"
                     className="w-full bg-slate-950 border border-cyan-500/40 rounded-xl px-4 py-3 text-center text-2xl tracking-widest text-white placeholder-cyan-800 focus:outline-none focus:border-amber-400 font-mono"
                   />
                 </div>
@@ -683,17 +585,98 @@ export default function App() {
                   type="submit"
                   className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-lg shadow-xl shadow-amber-500/20 transition mt-4"
                 >
-                  Acessar Sala ➔
+                  Entrar nas Cadeiras ➔
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => { setView('home'); soundFX.playClick(); }}
+                  onClick={() => { setView('student_room_list'); soundFX.playClick(); }}
                   className="w-full py-3 rounded-2xl bg-slate-950 border border-cyan-500/30 text-cyan-300 font-bold text-sm transition"
                 >
-                  Voltar
+                  Voltar às Salas
                 </button>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* 1.3 STUDENT CHAIR SELECTION (CADEIRAS DA SALA - MUDAM DE COR QUANDO OCUPADAS) */}
+        {view === 'student_chair_selection' && activeRoom && (
+          <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full py-6 space-y-6">
+            <div className="text-center">
+              <h2 className="text-2xl font-black text-white">{activeRoom.title} - Escolha sua Cadeira</h2>
+              <p className="text-cyan-300/70 text-sm">Digite seu nome, escolha seu avatar e clique em uma cadeira livre (as ocupadas mudam de cor)</p>
+            </div>
+
+            <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 shadow-xl space-y-6">
+              {/* Name & Avatar */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-6 border-b border-cyan-900/50">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-cyan-300 mb-1">Seu Nome</label>
+                  <input
+                    type="text"
+                    value={studentName}
+                    onChange={(e) => setStudentName(e.target.value)}
+                    placeholder="Digite seu nome"
+                    className="w-full bg-slate-950 border border-cyan-500/40 rounded-xl px-4 py-2.5 text-white font-semibold focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-cyan-300 mb-1">Avatar</label>
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {avatars.map(av => (
+                      <button
+                        key={av}
+                        type="button"
+                        onClick={() => setSelectedAvatar(av)}
+                        className={`text-xl p-2 rounded-xl border ${selectedAvatar === av ? 'bg-amber-400/30 border-amber-400 scale-110' : 'bg-slate-950 border-cyan-900'}`}
+                      >
+                        {av}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Chairs Grid (60 chairs) */}
+              <div>
+                <div className="flex items-center justify-between mb-3 text-xs font-bold text-cyan-300">
+                  <span>Cadeiras Disponíveis (Verde) e Ocupadas (Vermelho/Cinza)</span>
+                  <button onClick={() => fetchRoomsFromCloud()} className="text-amber-400 flex items-center space-x-1">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Atualizar Ocupação</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-6 sm:grid-cols-10 gap-2 max-h-[350px] overflow-y-auto pr-2">
+                  {Array(60).fill(null).map((_, idx) => {
+                    const occupant = activeRoom.chairs?.[idx];
+                    const isOccupied = occupant != null;
+
+                    return (
+                      <button
+                        key={idx}
+                        onClick={() => handleSelectChairAndEnter(idx)}
+                        className={`p-2.5 rounded-xl border flex flex-col items-center justify-center text-xs font-bold transition ${isOccupied ? 'bg-red-950/80 border-red-500/60 text-red-300 cursor-not-allowed' : 'bg-slate-950 border-cyan-800/60 hover:bg-emerald-950 hover:border-emerald-400 text-cyan-200 shadow'}`}
+                        title={isOccupied ? `Ocupado por ${occupant.name}` : `Cadeira ${idx + 1} - Livre`}
+                      >
+                        <Armchair className={`w-5 h-5 mb-1 ${isOccupied ? 'text-red-400' : 'text-cyan-400'}`} />
+                        <span>#{idx + 1}</span>
+                        <span className={`text-[9px] truncate max-w-full ${isOccupied ? 'text-red-300 font-black' : 'text-cyan-400'}`}>
+                          {isOccupied ? occupant.name : 'Livre'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <button
+                onClick={() => { setView('student_room_list'); soundFX.playClick(); }}
+                className="w-full py-3 rounded-2xl bg-slate-950 border border-cyan-500/30 text-cyan-300 font-bold transition"
+              >
+                Voltar à Lista de Salas
+              </button>
             </div>
           </div>
         )}
@@ -754,30 +737,30 @@ export default function App() {
           </div>
         )}
 
-        {/* 2. TEACHER DASHBOARD */}
+        {/* 2. TEACHER DASHBOARD (ABA PROFESSOR - EDIÇÃO DAS SALAS COM CADEIRAS) */}
         {view === 'teacher_dashboard' && (
           <div className="flex-1 flex flex-col space-y-8 py-6">
             <div className="w-full bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 font-black text-2xl md:text-3xl py-4 px-8 rounded-2xl shadow-xl text-center uppercase tracking-wider">
-              PAINEL DO PROFESSOR - GERENCIAMENTO DE SALAS
+              ABA PROFESSOR - CRIAÇÃO E EDIÇÃO DE SALAS E CADEIRAS
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               <div className="lg:col-span-2 space-y-6">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-white">Salas Ativas (Editar PIN/Nome ou Apagar)</h3>
+                  <h3 className="text-lg font-bold text-white">Salas de Cadeiras Ativas (Editar Nome/PIN ou Apagar)</h3>
                   <button
-                    onClick={() => { setEditingRoomId(null); setRoomTitle(''); setCustomPin(''); setView('create_room'); soundFX.playClick(); }}
+                    onClick={() => { setEditingRoomId(null); setRoomTitle(''); setCustomPin('1234'); setView('create_room'); soundFX.playClick(); }}
                     className="px-6 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-sm shadow transition flex items-center space-x-2"
                   >
                     <Plus className="w-5 h-5" />
-                    <span>Criar Nova Sala</span>
+                    <span>Criar Sala de Cadeiras</span>
                   </button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {rooms.length === 0 ? (
                     <div className="col-span-2 text-center py-12 bg-[#07262c] border border-cyan-500/30 rounded-2xl text-cyan-300/60">
-                      Nenhuma sala ativa. Crie uma nova sala definindo o nome e o PIN.
+                      Nenhuma sala de cadeiras criada. Crie uma nova sala definindo o nome e a senha (PIN).
                     </div>
                   ) : (
                     rooms.map((room) => (
@@ -791,11 +774,13 @@ export default function App() {
                               {room.subject || 'Geral'}
                             </span>
                             <span className="text-xs font-black text-amber-400 bg-slate-950 px-2.5 py-1 rounded-lg">
-                              PIN: {room.code}
+                              PIN: {room.code || '1234'}
                             </span>
                           </div>
                           <h4 className="text-lg font-black text-white mb-1">{room.title}</h4>
-                          <p className="text-xs text-cyan-300/70">{room.players?.length || 0} alunos conectados</p>
+                          <p className="text-xs text-cyan-300/70">
+                            {room.chairs?.filter((c: any) => c != null).length || 0} / 60 cadeiras ocupadas
+                          </p>
                         </div>
 
                         <div className="flex items-center space-x-2 mt-4 pt-4 border-t border-cyan-900/50">
@@ -803,7 +788,7 @@ export default function App() {
                             onClick={() => { setActiveRoom(room); setView('teacher_live_control'); soundFX.playClick(); }}
                             className="flex-1 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs text-center shadow transition"
                           >
-                            Gerenciar
+                            Ver Ocupação
                           </button>
                           <button
                             onClick={() => handleStartEditRoom(room)}
@@ -834,53 +819,29 @@ export default function App() {
                 <div>
                   <h3 className="text-lg font-bold text-white mb-2 flex items-center space-x-2">
                     <FileSpreadsheet className="w-5 h-5 text-amber-400" />
-                    <span>Inserir Conteúdo (Excel / CSV)</span>
+                    <span>Conteúdo / Questões</span>
                   </h3>
                   <p className="text-xs text-cyan-300/70 mb-6">
-                    Importe perguntas em formato Excel para qualquer sala.
+                    As salas de cadeiras utilizam os temas centrais (Geografia, Ciências, Vingadores) e perguntas interativas.
                   </p>
 
-                  <div className="space-y-4">
-                    {[
-                      { type: 'forca', label: 'INSERIR FORCA' },
-                      { type: 'verdadeiro_falso', label: 'INSERIR V/F' },
-                      { type: 'quiz', label: 'INSERIR QUIZ' }
-                    ].map((item) => (
-                      <div key={item.type} className="bg-slate-200 hover:bg-white border-2 border-slate-400 rounded-2xl p-4 text-slate-950 font-black shadow-lg text-center space-y-2">
-                        <span>{item.label}</span>
-                        <div className="flex gap-2 justify-center pt-1">
-                          <button
-                            onClick={() => downloadExcelTemplate(item.type as any)}
-                            className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center space-x-1"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                            <span>Modelo</span>
-                          </button>
-                          <label className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center space-x-1 cursor-pointer">
-                            <Upload className="w-3.5 h-3.5" />
-                            <span>Importar</span>
-                            <input 
-                              type="file" 
-                              accept=".xlsx, .xls, .csv" 
-                              className="hidden" 
-                              onChange={(e) => handleFileUpload(e, item.type as any)}
-                            />
-                          </label>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <button
+                    onClick={() => { setView('home'); soundFX.playClick(); }}
+                    className="w-full py-3 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-sm shadow transition"
+                  >
+                    Ver Visão do Aluno ➔
+                  </button>
                 </div>
 
                 <div className="p-4 bg-slate-950/60 rounded-2xl border border-cyan-900/60 text-xs text-cyan-300/80">
-                  🔒 <strong>Área Protegida:</strong> Apenas o professor com login (arenadejogos / 100529) acessa este painel.
+                  🔒 <strong>Acesso Professor:</strong> arenadejogos / 100529
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* 3. CREATE / EDIT ROOM FORM */}
+        {/* 3. CREATE / EDIT ROOM FORM (CRIAR / EDITAR CADEIRAS & PIN) */}
         {view === 'create_room' && (
           <div className="flex-1 max-w-3xl mx-auto w-full py-6">
             <div className="flex items-center space-x-4 mb-6">
@@ -891,14 +852,14 @@ export default function App() {
                 <ArrowLeft className="w-5 h-5 text-cyan-300" />
               </button>
               <div>
-                <h2 className="text-2xl font-black text-white">{editingRoomId ? 'Editar Sala (Nome e PIN)' : 'Criar Nova Sala com PIN'}</h2>
-                <p className="text-sm text-cyan-300/70">Atualize as informações da sala para os alunos.</p>
+                <h2 className="text-2xl font-black text-white">{editingRoomId ? 'Editar Sala e Cadeiras' : 'Criar Nova Sala com Cadeiras (PIN 1234)'}</h2>
+                <p className="text-sm text-cyan-300/70">Defina o nome da sala e a senha para os alunos acessarem.</p>
               </div>
             </div>
 
             <form onSubmit={handleSaveRoom} className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 md:p-8 space-y-6 shadow-xl">
               <div>
-                <label className="block text-sm font-bold text-cyan-200 mb-2">Tema Central</label>
+                <label className="block text-sm font-bold text-cyan-200 mb-2">Tema Central / Matéria</label>
                 <select
                   value={selectedTheme}
                   onChange={(e) => handleThemeChange(e.target.value)}
@@ -907,32 +868,31 @@ export default function App() {
                   <option value="Geografia">🌍 Geografia</option>
                   <option value="Ciências">🔬 Ciências</option>
                   <option value="Filme Os Vingadores">🛡️ Filme Os Vingadores</option>
-                  <option value="História">📜 História</option>
-                  <option value="Matemática">📐 Matemática</option>
                 </select>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-bold text-cyan-200 mb-2">Nome / Título da Sala</label>
+                  <label className="block text-sm font-bold text-cyan-200 mb-2">Nome da Sala de Cadeiras</label>
                   <input
                     type="text"
                     required
                     value={roomTitle}
                     onChange={(e) => setRoomTitle(e.target.value)}
-                    placeholder="Ex: Aula de Geografia - Turma A"
+                    placeholder="Ex: Sala de Geografia - Turma 1"
                     className="w-full bg-slate-950 border border-cyan-500/40 rounded-xl px-4 py-3 text-white placeholder-cyan-700 focus:outline-none focus:border-amber-400"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-cyan-200 mb-2">PIN de Acesso (Ex: 100529)</label>
+                  <label className="block text-sm font-bold text-cyan-200 mb-2">Senha / PIN de Acesso (Ex: 1234)</label>
                   <input
                     type="text"
                     maxLength={6}
+                    required
                     value={customPin}
                     onChange={(e) => setCustomPin(e.target.value)}
-                    placeholder="Novo PIN ou automático"
-                    className="w-full bg-slate-950 border border-cyan-500/40 rounded-xl px-4 py-3 text-white placeholder-cyan-700 focus:outline-none focus:border-amber-400"
+                    placeholder="1234"
+                    className="w-full bg-slate-950 border border-cyan-500/40 rounded-xl px-4 py-3 text-white placeholder-cyan-700 focus:outline-none focus:border-amber-400 font-mono"
                   />
                 </div>
               </div>
@@ -941,20 +901,20 @@ export default function App() {
                 type="submit"
                 className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-lg shadow-xl shadow-amber-500/20 transition"
               >
-                {editingRoomId ? 'Salvar Alterações da Sala' : 'Abrir Sala e Gerar PIN'}
+                {editingRoomId ? 'Salvar Alterações' : 'Criar Sala de Cadeiras'}
               </button>
             </form>
           </div>
         )}
 
-        {/* 4. TEACHER LIVE CONTROL ROOM */}
+        {/* 4. TEACHER LIVE CONTROL ROOM (VER CADEIRAS OCUPADAS EM TEMPO REAL) */}
         {view === 'teacher_live_control' && activeRoom && (
           <div className="flex-1 flex flex-col space-y-6 py-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 shadow-xl">
               <div>
-                <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Painel de Controle ao Vivo</span>
+                <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Painel do Professor - Ocupação ao Vivo</span>
                 <h2 className="text-3xl font-black text-white mt-1">{activeRoom.title}</h2>
-                <p className="text-sm text-cyan-300/70">PIN da Sala: <strong className="text-amber-400 text-lg tracking-wider bg-slate-950 px-3 py-1 rounded-lg ml-2">{activeRoom.code}</strong></p>
+                <p className="text-sm text-cyan-300/70">Senha (PIN): <strong className="text-amber-400 text-lg tracking-wider bg-slate-950 px-3 py-1 rounded-lg ml-2">{activeRoom.code || '1234'}</strong></p>
               </div>
 
               <div className="flex items-center space-x-3">
@@ -966,25 +926,6 @@ export default function App() {
                   <span>Atualizar Alunos</span>
                 </button>
 
-                {activeRoom.status === 'waiting' && (
-                  <button
-                    onClick={() => updateRoomStatus('playing', 0)}
-                    className="px-6 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black shadow-lg shadow-amber-500/30 flex items-center space-x-2 transition"
-                  >
-                    <Play className="w-5 h-5 fill-current" />
-                    <span>Iniciar Jogo Agora</span>
-                  </button>
-                )}
-
-                {activeRoom.status === 'playing' && (
-                  <button
-                    onClick={() => updateRoomStatus('waiting', -1)}
-                    className="px-4 py-3 rounded-2xl bg-red-600/20 border border-red-500/40 hover:bg-red-600/30 text-red-300 font-bold transition"
-                  >
-                    Pausar Jogo
-                  </button>
-                )}
-
                 <button
                   onClick={() => { setView('teacher_dashboard'); soundFX.playClick(); }}
                   className="px-4 py-3 rounded-2xl bg-slate-950 border border-cyan-500/30 text-cyan-300 font-bold transition"
@@ -994,262 +935,42 @@ export default function App() {
               </div>
             </div>
 
-            <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 text-center">
-              <h3 className="text-xl font-bold text-white mb-2">Alunos Conectados na Sala: {activeRoom.players?.length || 0}</h3>
-              <div className="flex flex-wrap gap-3 justify-center mt-4">
-                {activeRoom.players?.length === 0 ? (
-                  <p className="text-cyan-300/60 text-sm">Nenhum aluno conectado ainda. Abra o app no celular, digite o PIN {activeRoom.code} e escolha sua cadeira/equipe!</p>
-                ) : (
-                  activeRoom.players?.map((p: any) => (
-                    <div key={p.id} className="bg-slate-950 border border-cyan-900 px-4 py-2 rounded-xl flex items-center space-x-2">
-                      <span className="text-xl">{p.avatar}</span>
-                      <span className="font-bold text-sm text-amber-300">{p.name}</span>
-                      <span className="text-xs text-cyan-400">({p.mode === 'individual' ? `Cadeira #${(p.chairNumber ?? 0) + 1}` : `Equipe ${p.teamId}`})</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 5. STUDENT MODE SELECT (INDIVIDUAL OU EQUIPE) */}
-        {view === 'student_mode_select' && activeRoom && (
-          <div className="flex-1 flex flex-col items-center justify-center max-w-xl mx-auto w-full py-12 text-center space-y-6">
-            <div className="inline-block bg-amber-400/20 border border-amber-400 text-amber-400 text-xs font-bold px-4 py-1.5 rounded-full">
-              Sala: {activeRoom.title} (PIN: {activeRoom.code})
-            </div>
-
-            <h2 className="text-4xl font-black text-white">Escolha o Modo de Jogo</h2>
-            <p className="text-cyan-300/80 text-sm">Como você deseja participar da aula?</p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full mt-6">
-              <div 
-                onClick={() => { setPlayMode('individual'); setView('student_individual_chair'); soundFX.playClick(); }}
-                className="bg-[#07262c] hover:bg-[#0a353d] border-2 border-cyan-500/40 hover:border-amber-400 p-8 rounded-3xl cursor-pointer shadow-xl transition transform hover:scale-105 flex flex-col items-center space-y-4"
-              >
-                <div className="w-16 h-16 rounded-2xl bg-amber-400/20 flex items-center justify-center text-amber-400">
-                  <User className="w-8 h-8" />
-                </div>
-                <h3 className="text-xl font-black text-white">Sala Individual</h3>
-                <p className="text-xs text-cyan-300/70">Escolha uma das 60 cadeiras disponíveis e jogue por conta própria.</p>
+            {/* Live Chairs Grid for Teacher */}
+            <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold text-white">
+                  Mapa de Cadeiras (Ocupadas em Vermelho / Livres em Verde)
+                </h3>
+                <span className="text-amber-400 font-black text-sm">
+                  {activeRoom.chairs?.filter((c: any) => c != null).length || 0} / 60 Ocupadas
+                </span>
               </div>
 
-              <div 
-                onClick={() => { setPlayMode('team'); setView('student_team_select'); soundFX.playClick(); }}
-                className="bg-[#07262c] hover:bg-[#0a353d] border-2 border-cyan-500/40 hover:border-amber-400 p-8 rounded-3xl cursor-pointer shadow-xl transition transform hover:scale-105 flex flex-col items-center space-y-4"
-              >
-                <div className="w-16 h-16 rounded-2xl bg-teal-500/20 flex items-center justify-center text-teal-300">
-                  <UsersRound className="w-8 h-8" />
-                </div>
-                <h3 className="text-xl font-black text-white">Sala em Equipe</h3>
-                <p className="text-xs text-cyan-300/70">Escolha uma das 10 equipes (6 cadeiras cada) e jogue em grupo.</p>
-              </div>
-            </div>
-
-            <button
-              onClick={() => { setView('student_enter_pin'); soundFX.playClick(); }}
-              className="mt-4 px-6 py-2 rounded-xl bg-slate-950 border border-cyan-500/30 text-cyan-300 font-bold text-xs"
-            >
-              ← Digitar Outro PIN
-            </button>
-          </div>
-        )}
-
-        {/* 6. INDIVIDUAL CHAIR SELECTION (60 CHAIRS) */}
-        {view === 'student_individual_chair' && activeRoom && (
-          <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full py-6 space-y-6">
-            <div className="text-center">
-              <h2 className="text-2xl font-black text-white">Sala Individual - Escolha sua Cadeira (1 a 60)</h2>
-              <p className="text-cyan-300/70 text-sm">Sala: {activeRoom.title} | Digite seu nome, escolha seu avatar e clique em uma cadeira livre</p>
-            </div>
-
-            <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 shadow-xl space-y-6">
-              {/* Name & Avatar inputs */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-6 border-b border-cyan-900/50">
-                <div>
-                  <label className="block text-xs font-bold uppercase text-cyan-300 mb-1">Seu Nome</label>
-                  <input
-                    type="text"
-                    value={studentName}
-                    onChange={(e) => setStudentName(e.target.value)}
-                    placeholder="Digite seu nome"
-                    className="w-full bg-slate-950 border border-cyan-500/40 rounded-xl px-4 py-2.5 text-white font-semibold focus:outline-none focus:border-amber-400"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold uppercase text-cyan-300 mb-1">Avatar</label>
-                  <div className="flex gap-2 overflow-x-auto pb-1">
-                    {avatars.map(av => (
-                      <button
-                        key={av}
-                        type="button"
-                        onClick={() => setSelectedAvatar(av)}
-                        className={`text-xl p-2 rounded-xl border ${selectedAvatar === av ? 'bg-amber-400/30 border-amber-400 scale-110' : 'bg-slate-950 border-cyan-900'}`}
-                      >
-                        {av}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* 60 Chairs Grid */}
-              <div className="grid grid-cols-6 sm:grid-cols-10 gap-2 max-h-[350px] overflow-y-auto pr-2">
+              <div className="grid grid-cols-6 sm:grid-cols-10 gap-2 max-h-[400px] overflow-y-auto pr-2">
                 {Array(60).fill(null).map((_, idx) => {
-                  const isSelected = selectedChair === idx;
-                  const isOccupied = activeRoom.chairs?.[idx] != null;
+                  const occupant = activeRoom.chairs?.[idx];
+                  const isOccupied = occupant != null;
+
                   return (
-                    <button
+                    <div
                       key={idx}
-                      disabled={isOccupied}
-                      onClick={() => { setSelectedChair(idx); soundFX.playClick(); }}
-                      className={`p-2.5 rounded-xl border flex flex-col items-center justify-center text-xs font-bold transition ${isOccupied ? 'bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed opacity-50' : isSelected ? 'bg-amber-400 border-yellow-200 text-slate-950 scale-105 shadow-lg' : 'bg-slate-950 border-cyan-800/60 hover:bg-[#0a353d] text-cyan-200'}`}
+                      className={`p-2.5 rounded-xl border flex flex-col items-center justify-center text-xs font-bold ${isOccupied ? 'bg-red-950/80 border-red-500 text-red-200 shadow-lg' : 'bg-slate-950 border-cyan-900 text-cyan-500 opacity-60'}`}
                     >
-                      <Armchair className="w-5 h-5 mb-1" />
-                      <span>{idx + 1}</span>
-                      {isOccupied && <span className="text-[9px] text-red-400">Ocupada</span>}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <button
-                disabled={selectedChair === null || !studentName.trim()}
-                onClick={handleSelectSeatAndEnterRoom}
-                className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-lg shadow-xl transition disabled:opacity-50"
-              >
-                Entrar na Sala de Jogo ➔
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* 7. TEAM ROOMS SELECT (10 teams x 6 chairs) */}
-        {view === 'student_team_select' && activeRoom && (
-          <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full py-6 space-y-6">
-            <div className="text-center">
-              <h2 className="text-2xl font-black text-white">Sala em Equipe (10 Salas x 6 Cadeiras)</h2>
-              <p className="text-cyan-300/70 text-sm">Sala: {activeRoom.title} | Digite seu nome, escolha sua equipe e sua vaga</p>
-            </div>
-
-            <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 shadow-xl space-y-6">
-              {/* Name & Avatar */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-6 border-b border-cyan-900/50">
-                <div>
-                  <label className="block text-xs font-bold uppercase text-cyan-300 mb-1">Seu Nome</label>
-                  <input
-                    type="text"
-                    value={studentName}
-                    onChange={(e) => setStudentName(e.target.value)}
-                    placeholder="Digite seu nome"
-                    className="w-full bg-slate-950 border border-cyan-500/40 rounded-xl px-4 py-2.5 text-white font-semibold focus:outline-none focus:border-amber-400"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold uppercase text-cyan-300 mb-1">Avatar</label>
-                  <div className="flex gap-2 overflow-x-auto pb-1">
-                    {avatars.map(av => (
-                      <button
-                        key={av}
-                        type="button"
-                        onClick={() => setSelectedAvatar(av)}
-                        className={`text-xl p-2 rounded-xl border ${selectedAvatar === av ? 'bg-amber-400/30 border-amber-400 scale-110' : 'bg-slate-950 border-cyan-900'}`}
-                      >
-                        {av}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* 10 Teams List */}
-              <div className="space-y-4 max-h-[350px] overflow-y-auto pr-2">
-                {Array.from({length: 10}, (_, teamIdx) => teamIdx + 1).map((teamId) => {
-                  const teamObj = activeRoom.teams?.find((t: any) => t.id === teamId) || { members: [] };
-                  return (
-                    <div key={teamId} className="bg-slate-950 border border-cyan-900/60 rounded-2xl p-4 space-y-3">
-                      <h4 className="font-black text-white flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <UsersRound className="w-5 h-5 text-amber-400" />
-                          <span>Equipe {teamId}</span>
-                        </div>
-                        <span className="text-xs text-cyan-400 font-normal">{teamObj.members?.length || 0}/6 membros</span>
-                      </h4>
-
-                      <div className="grid grid-cols-6 gap-2">
-                        {Array.from({length: 6}, (_, chairIdx) => {
-                          const isSelectedTeam = selectedTeamRoom === teamId;
-                          const isSelectedChair = selectedChair === chairIdx;
-                          const isThisSeatSelected = isSelectedTeam && isSelectedChair;
-                          const isOccupied = (teamObj.members?.length || 0) > chairIdx;
-
-                          return (
-                            <button
-                              key={chairIdx}
-                              disabled={isOccupied}
-                              onClick={() => { setSelectedTeamRoom(teamId); setSelectedChair(chairIdx); soundFX.playClick(); }}
-                              className={`p-3 rounded-xl border flex flex-col items-center justify-center text-xs font-bold transition ${isOccupied ? 'bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed opacity-50' : isThisSeatSelected ? 'bg-amber-400 border-yellow-200 text-slate-950 scale-105 shadow-lg' : 'bg-[#07262c] border-cyan-800 hover:bg-[#0a353d] text-cyan-200'}`}
-                            >
-                              <Armchair className="w-5 h-5 mb-1" />
-                              <span>Vaga {chairIdx + 1}</span>
-                              {isOccupied && <span className="text-[9px] text-red-400">Ocupada</span>}
-                            </button>
-                          );
-                        })}
-                      </div>
+                      <Armchair className={`w-5 h-5 mb-1 ${isOccupied ? 'text-red-400' : 'text-cyan-600'}`} />
+                      <span>#{idx + 1}</span>
+                      <span className={`text-[10px] truncate max-w-full ${isOccupied ? 'text-amber-300 font-black' : 'text-cyan-600'}`}>
+                        {isOccupied ? occupant.name : 'Livre'}
+                      </span>
                     </div>
                   );
                 })}
               </div>
-
-              <button
-                disabled={selectedTeamRoom === null || selectedChair === null || !studentName.trim()}
-                onClick={handleSelectSeatAndEnterRoom}
-                className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-lg shadow-xl transition disabled:opacity-50"
-              >
-                Entrar na Sala de Jogo ➔
-              </button>
             </div>
           </div>
         )}
 
-        {/* 8. STUDENT ROOM ENTRY (SALA DE JOGO) */}
-        {view === 'student_room_entry' && activeRoom && (
-          <div className="flex-1 flex flex-col items-center justify-center max-w-lg mx-auto w-full py-12 text-center space-y-6">
-            <div className="w-24 h-24 rounded-3xl bg-amber-400/20 border-2 border-amber-400 flex items-center justify-center text-5xl mx-auto shadow-2xl animate-bounce">
-              <DoorOpen className="w-12 h-12 text-amber-400" />
-            </div>
-            <div>
-              <span className="text-xs font-bold uppercase tracking-widest text-slate-950 bg-amber-400 px-3 py-1 rounded-lg">Você entrou na Sala de Jogo!</span>
-              <h2 className="text-3xl font-black text-white mt-2">{activeRoom.title}</h2>
-              <p className="text-cyan-300/80 text-sm mt-1">Aluno: <strong>{student?.name}</strong> {student?.avatar}</p>
-              <p className="text-xs text-amber-400 mt-1 font-bold">
-                {student?.mode === 'individual' ? `Cadeira Individual #${(student?.chairNumber ?? 0) + 1}` : `Equipe ${student?.teamId} (Vaga ${(student?.chairNumber ?? 0) + 1})`}
-              </p>
-            </div>
-
-            <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 w-full space-y-3">
-              <div className="flex items-center justify-center space-x-2 text-cyan-300 font-bold">
-                <Users className="w-5 h-5 text-amber-400" />
-                <span>Alunos na Sala: {activeRoom.players?.length || 1}</span>
-              </div>
-              <p className="text-xs text-cyan-300/60">
-                Tudo pronto! Clique abaixo para ir para a Arena de Jogos e resolver as questões propostas pelo professor.
-              </p>
-            </div>
-
-            <button
-              onClick={() => { setView('student_game_hub'); soundFX.playClick(); }}
-              className="w-full py-4 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-lg shadow-xl animate-pulse"
-            >
-              Ir para a Arena de Jogos ➔
-            </button>
-          </div>
-        )}
-
-        {/* 9. STUDENT GAME HUB (ARENA DE JOGOS COM OS JOGOS) */}
-        {view === 'student_game_hub' && (
+        {/* 5. STUDENT GAME HUB (ARENA DE JOGOS) */}
+        {view === 'student_game_hub' && activeRoom && (
           <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full py-8 space-y-8">
             <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 md:p-8 flex items-center justify-between shadow-xl">
               <div className="flex items-center space-x-4">
@@ -1259,7 +980,7 @@ export default function App() {
                 <div>
                   <h2 className="text-2xl font-black text-white">{student?.name}</h2>
                   <p className="text-xs text-amber-400 font-bold mt-0.5">
-                    {student?.mode === 'individual' ? `Cadeira Individual #${(student?.chairNumber ?? 0) + 1}` : `Equipe ${student?.teamId} (Vaga ${(student?.chairNumber ?? 0) + 1})`}
+                    {activeRoom.title} &bull; Cadeira #{((student?.chairIndex ?? 0) + 1)}
                   </p>
                 </div>
               </div>
@@ -1270,7 +991,7 @@ export default function App() {
             </div>
 
             <div>
-              <h3 className="text-xl font-black text-white mb-4">🎮 Arena de Jogos - Escolha um Jogo ({activeRoom?.subject || 'Geral'})</h3>
+              <h3 className="text-xl font-black text-white mb-4">🎮 Arena de Jogos - {activeRoom.subject}</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {[
                   { id: 'quiz', title: 'Quiz Múltipla Escolha', desc: 'Responda rápido e ganhe pontos!', color: 'from-blue-600 to-cyan-600' },
@@ -1297,8 +1018,8 @@ export default function App() {
           </div>
         )}
 
-        {/* 10. STUDENT ACTIVE GAME SCREEN */}
-        {view === 'student_active_game' && (
+        {/* 6. STUDENT ACTIVE GAME SCREEN */}
+        {view === 'student_active_game' && activeRoom && (
           <div className="flex-1 flex flex-col max-w-3xl mx-auto w-full py-6 space-y-6">
             <div className="flex items-center justify-between">
               <button 
@@ -1330,7 +1051,22 @@ export default function App() {
                     <button
                       key={idx}
                       disabled={hasAnswered}
-                      onClick={() => submitAnswer(idx)}
+                      onClick={() => {
+                        if (hasAnswered) return;
+                        setHasAnswered(true);
+                        setSelectedAnswer(idx);
+                        const isCorrect = idx === (activeRoom?.questions?.[0]?.correctIndex ?? 0);
+                        setAnswerResult(isCorrect);
+                        if (isCorrect) {
+                          soundFX.playCorrect();
+                          confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
+                          if (student) {
+                            student.score = (student.score || 0) + 1000;
+                          }
+                        } else {
+                          soundFX.playIncorrect();
+                        }
+                      }}
                       className={`${colors[idx]} border-2 p-6 rounded-2xl font-bold text-lg text-white shadow-lg transition transform active:scale-95 flex items-center space-x-4 disabled:opacity-70 ${selectedAnswer === idx ? 'ring-4 ring-white' : ''}`}
                     >
                       <span className="text-2xl">{symbols[idx]}</span>
@@ -1354,7 +1090,7 @@ export default function App() {
 
       {/* Footer */}
       <footer className="border-t border-cyan-900/40 py-4 text-center text-xs text-cyan-400/60 z-10">
-        Arena de Jogos &bull; Salas Individuais (60 cadeiras) e Equipes (10 salas x 6 cadeiras)
+        Arena de Jogos &bull; Aba Alunos (Lista de Cadeiras) &bull; Aba Professor (Criação e Edição de Salas)
       </footer>
 
     </div>
