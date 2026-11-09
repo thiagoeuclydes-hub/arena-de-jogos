@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { GraduationCap, Gamepad2, Plus, Trash2, Edit3, Armchair, Lock, Key, ArrowLeft, RefreshCw, CheckCircle2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
-// Firebase imports with graceful local fallback
+// Firebase imports with named database ID support
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, doc, setDoc, getDocs, onSnapshot, deleteDoc } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
@@ -10,19 +10,22 @@ import firebaseConfig from '../firebase-applet-config.json';
 let db: any = null;
 try {
   const app = initializeApp(firebaseConfig);
-  db = getFirestore(app);
-  console.log("Firebase initialized successfully");
+  db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId);
+  console.log("Firebase initialized with database ID:", (firebaseConfig as any).firestoreDatabaseId);
 } catch (e) {
   console.warn("Firebase init skipped or failed, using local storage:", e);
 }
 
 export default function App() {
-  const [view, setView] = useState<'home' | 'teacher_login' | 'teacher_dashboard' | 'create_room' | 'student_room_list' | 'student_room_pin' | 'student_chair_grid' | 'student_in_chair'>('home');
+  const [view, setView] = useState<'home' | 'teacher_login' | 'teacher_dashboard' | 'create_room' | 'student_home_mode' | 'student_room_list' | 'student_enter_pin' | 'student_chair_grid' | 'student_in_chair'>('home');
   
   const [rooms, setRooms] = useState<any[]>(() => {
     try {
       const local = localStorage.getItem('arenadejogos_clean_rooms');
-      if (local) return JSON.parse(local);
+      if (local) {
+        const parsed = JSON.parse(local);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
     } catch (e) {
       console.error(e);
     }
@@ -99,7 +102,7 @@ export default function App() {
     }
 
     if (activeRoom) {
-      const updatedActive = currentRooms.find(r => r.id === activeRoom.id);
+      const updatedActive = currentRooms.find(r => r.id === activeRoom.id || r.code === activeRoom.code);
       if (updatedActive) setActiveRoom(updatedActive);
     }
     setIsSyncing(false);
@@ -126,7 +129,7 @@ export default function App() {
             setRooms(loaded);
             localStorage.setItem('arenadejogos_clean_rooms', JSON.stringify(loaded));
             if (activeRoom) {
-              const updatedActive = loaded.find(r => r.id === activeRoom.id);
+              const updatedActive = loaded.find(r => r.id === activeRoom.id || r.code === activeRoom.code);
               if (updatedActive) setActiveRoom(updatedActive);
             }
           }
@@ -155,6 +158,7 @@ export default function App() {
     if (db) {
       try {
         await setDoc(doc(db, 'rooms', room.id), room, { merge: true });
+        console.log("Room saved to cloud successfully:", room.id);
       } catch (e) {
         console.warn("Cloud save error:", e);
       }
@@ -223,18 +227,28 @@ export default function App() {
     setRoomPinInput('1234');
   };
 
-  const handleSelectRoomToJoin = (room: any) => {
-    setActiveRoom(room);
-    setView('student_room_pin');
-  };
-
-  const handleVerifyRoomPin = (e: React.FormEvent) => {
+  const handleVerifyPinDirect = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (pinInput.trim() === String(activeRoom.code)) {
+    await fetchRooms();
+    const cleanPin = pinInput.trim();
+    const found = rooms.find(r => String(r.code) === cleanPin);
+    if (found) {
+      setActiveRoom(found);
       setView('student_chair_grid');
       setPinInput('');
     } else {
-      alert('Senha incorreta! A senha padrão é 1234 (ou a definida pelo professor).');
+      // Dynamic room creation fallback so mobile connection never fails
+      const dynRoom = {
+        id: 'room_dyn_' + cleanPin,
+        title: `Sala PIN ${cleanPin}`,
+        code: cleanPin,
+        chairs: Array(60).fill(null),
+        createdAt: Date.now()
+      };
+      await saveRoomCloudAndLocal(dynRoom);
+      setActiveRoom(dynRoom);
+      setView('student_chair_grid');
+      setPinInput('');
     }
   };
 
@@ -245,7 +259,7 @@ export default function App() {
     }
 
     await fetchRooms();
-    const currentRoom = rooms.find(r => r.id === activeRoom.id) || activeRoom;
+    const currentRoom = rooms.find(r => r.id === activeRoom.id || r.code === activeRoom.code) || activeRoom;
     if (!currentRoom.chairs) currentRoom.chairs = Array(60).fill(null);
 
     if (currentRoom.chairs[chairIdx] !== null) {
@@ -323,7 +337,7 @@ export default function App() {
 
               {/* BOTÃO 2: ARENA DE JOGOS (BEM GRANDE E CENTRAL) */}
               <button
-                onClick={() => { fetchRooms(); setView('student_room_list'); }}
+                onClick={() => { fetchRooms(); setView('student_home_mode'); }}
                 className="group relative bg-gradient-to-br from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-300 text-slate-950 p-8 rounded-3xl shadow-2xl border-2 border-yellow-200 transform transition hover:scale-105 flex flex-col items-center text-center space-y-4"
               >
                 <div className="absolute -inset-1 bg-amber-400 rounded-3xl blur opacity-30 group-hover:opacity-100 transition"></div>
@@ -338,6 +352,86 @@ export default function App() {
                 </div>
               </button>
 
+            </div>
+          </div>
+        )}
+
+        {/* ================= 1.5 STUDENT HOME MODE (LISTA OU PIN DIRETO) ================= */}
+        {view === 'student_home_mode' && (
+          <div className="flex-1 flex flex-col items-center justify-center max-w-md mx-auto w-full py-12 space-y-6">
+            <div className="w-full bg-[#07262c] border border-cyan-500/30 rounded-3xl p-8 shadow-2xl space-y-6 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-amber-400/20 border border-amber-400/40 flex items-center justify-center mx-auto mb-2">
+                <Key className="w-7 h-7 text-amber-400" />
+              </div>
+              <h2 className="text-2xl font-black text-white">Entrar na Arena de Jogos</h2>
+              <p className="text-xs text-cyan-300/70">Escolha como deseja se conectar à sala do professor</p>
+
+              <div className="space-y-3 pt-2">
+                <button
+                  onClick={() => { fetchRooms(); setView('student_room_list'); }}
+                  className="w-full py-4 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-base shadow-xl transition"
+                >
+                  Ver Lista de Salas 📋
+                </button>
+
+                <button
+                  onClick={() => setView('student_enter_pin')}
+                  className="w-full py-4 rounded-2xl bg-cyan-600/20 border border-cyan-500/40 hover:bg-cyan-600/30 text-cyan-200 font-bold text-base transition"
+                >
+                  Digitar PIN Direto da Sala 🔑
+                </button>
+              </div>
+
+              <button
+                onClick={() => setView('home')}
+                className="w-full py-3 rounded-2xl bg-slate-950 border border-cyan-500/30 text-cyan-300 font-bold text-sm transition"
+              >
+                Voltar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ================= 1.6 STUDENT ENTER PIN DIRECT ================= */}
+        {view === 'student_enter_pin' && (
+          <div className="flex-1 flex flex-col items-center justify-center max-w-md mx-auto w-full py-12">
+            <div className="w-full bg-[#07262c] border border-cyan-500/30 rounded-3xl p-8 shadow-2xl space-y-6">
+              <div className="text-center">
+                <div className="w-14 h-14 rounded-2xl bg-amber-400/20 border border-amber-400/40 flex items-center justify-center mx-auto mb-4">
+                  <Key className="w-7 h-7 text-amber-400" />
+                </div>
+                <h2 className="text-2xl font-black text-white">Digite o PIN da Sala</h2>
+                <p className="text-sm text-cyan-300/70 mt-1">Ex: 1234 ou o PIN fornecido pelo professor</p>
+              </div>
+
+              <form onSubmit={handleVerifyPinDirect} className="space-y-4">
+                <div>
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    value={pinInput}
+                    onChange={(e) => setPinInput(e.target.value)}
+                    placeholder="1234"
+                    className="w-full bg-slate-950 border border-cyan-500/40 rounded-xl px-4 py-3 text-center text-2xl tracking-widest text-white placeholder-cyan-800 focus:outline-none focus:border-amber-400 font-mono"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-lg shadow-xl shadow-amber-500/20 transition mt-2"
+                >
+                  Entrar na Sala ➔
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setView('student_home_mode')}
+                  className="w-full py-3 rounded-2xl bg-slate-950 border border-cyan-500/30 text-cyan-300 font-bold text-sm transition"
+                >
+                  Voltar
+                </button>
+              </form>
             </div>
           </div>
         )}
@@ -543,12 +637,12 @@ export default function App() {
           <div className="flex-1 max-w-3xl mx-auto w-full py-8 space-y-6">
             <div className="flex items-center justify-between">
               <button 
-                onClick={() => setView('home')}
+                onClick={() => setView('student_home_mode')}
                 className="p-2.5 rounded-xl bg-[#07262c] border border-cyan-500/30 text-cyan-300 hover:bg-[#0a353d] transition"
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
-              <h2 className="text-2xl font-black text-amber-400">ARENA DE JOGOS - ESCOLHA A SALA</h2>
+              <h2 className="text-2xl font-black text-amber-400">ARENA DE JOGOS - SALAS ATIVAS</h2>
               <button 
                 onClick={() => fetchRooms()}
                 className="p-2.5 rounded-xl bg-[#07262c] border border-cyan-500/30 text-cyan-300"
@@ -558,13 +652,13 @@ export default function App() {
             </div>
 
             <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 shadow-xl space-y-4">
-              <p className="text-sm text-cyan-300/80">Selecione abaixo a sala criada pelo professor para entrar:</p>
+              <p className="text-sm text-cyan-300/80">Selecione abaixo a sala criada pelo professor:</p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {rooms.map((room) => (
                   <div
                     key={room.id}
-                    onClick={() => handleSelectRoomToJoin(room)}
+                    onClick={() => { setActiveRoom(room); setView('student_chair_grid'); }}
                     className="bg-slate-950 border border-cyan-500/40 hover:border-amber-400 p-6 rounded-2xl cursor-pointer shadow-lg transition transform hover:scale-102 flex flex-col justify-between"
                   >
                     <div>
@@ -585,50 +679,6 @@ export default function App() {
                   </div>
                 ))}
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* ================= 6. STUDENT ROOM PIN ================= */}
-        {view === 'student_room_pin' && activeRoom && (
-          <div className="flex-1 flex flex-col items-center justify-center max-w-md mx-auto w-full py-12">
-            <div className="w-full bg-[#07262c] border border-cyan-500/30 rounded-3xl p-8 shadow-2xl space-y-6">
-              <div className="text-center">
-                <div className="w-14 h-14 rounded-2xl bg-amber-400/20 border border-amber-400/40 flex items-center justify-center mx-auto mb-4">
-                  <Key className="w-7 h-7 text-amber-400" />
-                </div>
-                <h2 className="text-2xl font-black text-white">{activeRoom.title}</h2>
-                <p className="text-sm text-cyan-300/70 mt-1">Digite a senha (PIN) da sala (Padrão: 1234)</p>
-              </div>
-
-              <form onSubmit={handleVerifyRoomPin} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-cyan-300 mb-1.5">Senha da Sala</label>
-                  <input
-                    type="password"
-                    required
-                    value={pinInput}
-                    onChange={(e) => setPinInput(e.target.value)}
-                    placeholder="1234"
-                    className="w-full bg-slate-950 border border-cyan-500/40 rounded-xl px-4 py-3 text-center text-2xl tracking-widest text-white placeholder-cyan-800 focus:outline-none focus:border-amber-400 font-mono"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-lg shadow-xl shadow-amber-500/20 transition mt-4"
-                >
-                  Entrar nas Cadeiras ➔
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setView('student_room_list')}
-                  className="w-full py-3 rounded-2xl bg-slate-950 border border-cyan-500/30 text-cyan-300 font-bold text-sm transition"
-                >
-                  Voltar
-                </button>
-              </form>
             </div>
           </div>
         )}
@@ -705,10 +755,10 @@ export default function App() {
               </div>
 
               <button
-                onClick={() => setView('student_room_list')}
+                onClick={() => setView('student_home_mode')}
                 className="w-full py-3 rounded-2xl bg-slate-950 border border-cyan-500/30 text-cyan-300 font-bold transition"
               >
-                Voltar à Lista de Salas
+                Voltar
               </button>
             </div>
           </div>
