@@ -7,6 +7,20 @@ import {
 import confetti from 'canvas-confetti';
 import * as XLSX from 'xlsx';
 
+// Firebase imports
+import { initializeApp } from 'firebase/app';
+import { getFirestore, collection, doc, setDoc, getDocs, onSnapshot, deleteDoc } from 'firebase/firestore';
+import firebaseConfig from '../firebase-applet-config.json';
+
+let db: any = null;
+try {
+  const app = initializeApp(firebaseConfig);
+  db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId);
+  console.log("Firebase initialized successfully");
+} catch (e) {
+  console.error("Firebase init error:", e);
+}
+
 // Sound effects generator using Web Audio API
 class SoundFX {
   ctx: AudioContext | null = null;
@@ -106,9 +120,13 @@ const THEME_PRESETS: Record<string, any[]> = {
 };
 
 export default function App() {
-  const [view, setView] = useState<'home' | 'teacher_login' | 'teacher_dashboard' | 'create_room' | 'student_mode_select' | 'student_individual_chair' | 'student_team_select' | 'student_room_entry' | 'student_game_hub' | 'student_active_game' | 'teacher_live_control'>('home');
-  const [rooms, setRooms] = useState<any[]>([]);
+  const [view, setView] = useState<'home' | 'teacher_login' | 'teacher_dashboard' | 'create_room' | 'student_enter_pin' | 'student_mode_select' | 'student_individual_chair' | 'student_team_select' | 'student_room_entry' | 'student_game_hub' | 'student_active_game' | 'teacher_live_control'>('home');
+  const [rooms, setRooms] = useState<any[]>([
+    { id: 'room_1', code: '100529', title: 'Sala 1 - Geografia Global', subject: 'Geografia', gameType: 'quiz', status: 'waiting', currentQuestionIndex: -1, questions: THEME_PRESETS["Geografia"], players: [], teams: Array.from({length: 10}, (_, i) => ({ id: i+1, name: `Equipe ${i+1}`, members: [] })), chairs: Array(60).fill(null), createdAt: Date.now() },
+    { id: 'room_2', code: '555555', title: 'Sala 5 - Jogo das Cores', subject: 'Ciências', gameType: 'quiz', status: 'waiting', currentQuestionIndex: -1, questions: THEME_PRESETS["Ciências"], players: [], teams: Array.from({length: 10}, (_, i) => ({ id: i+1, name: `Equipe ${i+1}`, members: [] })), chairs: Array(60).fill(null), createdAt: Date.now() }
+  ]);
   const [activeRoom, setActiveRoom] = useState<any>(null);
+  const [studentPinInput, setStudentPinInput] = useState('');
   const [student, setStudent] = useState<any>(null);
   const [muted, setMuted] = useState(false);
 
@@ -140,50 +158,88 @@ export default function App() {
   const [hasAnswered, setHasAnswered] = useState(false);
   const [answerResult, setAnswerResult] = useState<boolean | null>(null);
 
-  // Load rooms from localStorage with fallback
-  const fetchRoomsLocal = () => {
+  // Sync with Firebase Firestore & localStorage fallback
+  useEffect(() => {
+    if (db) {
+      try {
+        const unsubscribe = onSnapshot(collection(db, 'rooms'), (snapshot: any) => {
+          const loadedRooms: any[] = [];
+          snapshot.forEach((docSnap: any) => {
+            const data = docSnap.data();
+            loadedRooms.push({
+              ...data,
+              id: docSnap.id,
+              chairs: data.chairs || Array(60).fill(null),
+              teams: data.teams || Array.from({length: 10}, (_, i) => ({ id: i+1, name: `Equipe ${i+1}`, members: [] })),
+              players: data.players || [],
+              questions: data.questions || THEME_PRESETS["Geografia"]
+            });
+          });
+          if (loadedRooms.length > 0) {
+            setRooms(loadedRooms);
+            localStorage.setItem('ludus_rooms', JSON.stringify(loadedRooms));
+          } else {
+            // Seed initial rooms if empty in Firestore
+            rooms.forEach(async (r) => {
+              await setDoc(doc(db, 'rooms', r.id), r);
+            });
+          }
+        }, (err: any) => {
+          console.error("Firestore snapshot error:", err);
+          loadLocalStorageFallback();
+        });
+        return () => unsubscribe();
+      } catch (e) {
+        console.error("Firestore init error:", e);
+        loadLocalStorageFallback();
+      }
+    } else {
+      loadLocalStorageFallback();
+    }
+  }, []);
+
+  const loadLocalStorageFallback = () => {
     try {
       const local = localStorage.getItem('ludus_rooms');
       if (local) {
         const parsed = JSON.parse(local);
-        return parsed.map((r: any) => ({
-          ...r,
-          chairs: r.chairs || Array(60).fill(null),
-          teams: r.teams || Array.from({length: 10}, (_, i) => ({ id: i+1, name: `Equipe ${i+1}`, members: [] })),
-          players: r.players || [],
-          questions: r.questions || []
-        }));
+        setRooms(parsed);
       }
     } catch (e) {
       console.error(e);
     }
-    return [
-      { id: 'room_1', code: '123456', title: 'Sala 1 - Geografia Global', subject: 'Geografia', gameType: 'quiz', status: 'waiting', currentQuestionIndex: -1, questions: THEME_PRESETS["Geografia"], players: [], teams: Array.from({length: 10}, (_, i) => ({ id: i+1, name: `Equipe ${i+1}`, members: [] })), chairs: Array(60).fill(null), createdAt: Date.now() }
-    ];
   };
 
-  const saveRoomsLocal = (updatedRooms: any[]) => {
-    try {
-      localStorage.setItem('ludus_rooms', JSON.stringify(updatedRooms));
-      setRooms(updatedRooms);
-    } catch (e) {
-      console.error(e);
+  const saveRoomToCloudAndLocal = async (room: any) => {
+    const updated = rooms.map(r => r.id === room.id ? room : r);
+    if (!updated.some(r => r.id === room.id)) {
+      updated.unshift(room);
+    }
+    setRooms(updated);
+    localStorage.setItem('ludus_rooms', JSON.stringify(updated));
+
+    if (db) {
+      try {
+        await setDoc(doc(db, 'rooms', room.id), room);
+      } catch (e) {
+        console.error("Cloud save error:", e);
+      }
     }
   };
 
-  useEffect(() => {
-    const initial = fetchRoomsLocal();
-    setRooms(initial);
-    localStorage.setItem('ludus_rooms', JSON.stringify(initial));
-  }, []);
+  const deleteRoomFromCloudAndLocal = async (roomId: string, roomCode: string) => {
+    const updated = rooms.filter(r => r.id !== roomId && r.code !== roomCode);
+    setRooms(updated);
+    localStorage.setItem('ludus_rooms', JSON.stringify(updated));
 
-  // Poll active rooms
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setRooms(fetchRoomsLocal());
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
+    if (db) {
+      try {
+        await deleteDoc(doc(db, 'rooms', roomId));
+      } catch (e) {
+        console.error("Cloud delete error:", e);
+      }
+    }
+  };
 
   const toggleSound = () => {
     soundFX.muted = !muted;
@@ -198,7 +254,7 @@ export default function App() {
       setUsernameInput('');
       setPasswordInput('');
     } else {
-      alert('Usuário ou senha do professor incorretos.');
+      alert('Usuário ou senha do professor incorretos. Use arenadejogos / 100529');
     }
   };
 
@@ -210,29 +266,6 @@ export default function App() {
       setQuestions(THEME_PRESETS[theme]);
     }
     soundFX.playClick();
-  };
-
-  const handleGenerateAI = async () => {
-    const topicToUse = aiTopic.trim() || selectedTheme;
-    setIsGenerating(true);
-    soundFX.playClick();
-    
-    setTimeout(() => {
-      let generated = [
-        {
-          question: `Qual é o fato mais marcante sobre ${topicToUse}?`,
-          options: ["Sua enorme importância e impacto", "Sua irrelevância", "Nenhum impacto", "Apenas teoria"],
-          correctIndex: 0
-        },
-        {
-          question: `Como ${topicToUse} se aplica no dia a dia?`,
-          options: ["Em quase todas as áreas do conhecimento", "Apenas em ficção", "Nunca", "Somente no passado"],
-          correctIndex: 0
-        }
-      ];
-      setQuestions(generated);
-      setIsGenerating(false);
-    }, 600);
   };
 
   const downloadExcelTemplate = (type: 'quiz' | 'verdadeiro_falso' | 'forca') => {
@@ -255,7 +288,7 @@ export default function App() {
     const worksheet = XLSX.utils.json_to_sheet(sampleData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Template');
-    XLSX.writeFile(workbook, `template_${type}_ludusarena.xlsx`);
+    XLSX.writeFile(workbook, `template_${type}_arenadejogos.xlsx`);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'quiz' | 'verdadeiro_falso' | 'forca') => {
@@ -293,7 +326,7 @@ export default function App() {
         }
 
         setQuestions(parsedQuestions);
-        setGameType(type);
+        setGameType(type as any);
         setView('create_room');
         alert(`Arquivo importado com sucesso! ${parsedQuestions.length} itens carregados.`);
       } catch (err) {
@@ -312,18 +345,16 @@ export default function App() {
     }
     soundFX.playClick();
 
-    const currentRooms = fetchRoomsLocal();
-
     if (editingRoomId) {
-      const room = currentRooms.find((r: any) => r.id === editingRoomId);
+      const room = rooms.find((r: any) => r.id === editingRoomId);
       if (room) {
         room.title = roomTitle;
         if (customPin.trim()) {
           room.code = customPin.trim();
         }
         room.subject = roomSubject || selectedTheme;
+        saveRoomToCloudAndLocal(room);
       }
-      saveRoomsLocal(currentRooms);
       setEditingRoomId(null);
       setView('teacher_dashboard');
     } else {
@@ -342,8 +373,7 @@ export default function App() {
         chairs: Array(60).fill(null),
         createdAt: Date.now()
       };
-      const updated = [newRoom, ...currentRooms];
-      saveRoomsLocal(updated);
+      saveRoomToCloudAndLocal(newRoom);
       setActiveRoom(newRoom);
       setView('teacher_live_control');
     }
@@ -356,6 +386,19 @@ export default function App() {
     setCustomPin(room.code);
     setRoomSubject(room.subject || '');
     setView('create_room');
+  };
+
+  const handleVerifyStudentPin = (e: React.FormEvent) => {
+    e.preventDefault();
+    soundFX.playClick();
+    const found = rooms.find(r => r.code === studentPinInput.trim());
+    if (found) {
+      setActiveRoom(found);
+      setView('student_mode_select');
+      setStudentPinInput('');
+    } else {
+      alert('Sala não encontrada com este PIN. Verifique com o professor o PIN correto.');
+    }
   };
 
   const handleSelectSeatAndEnterRoom = () => {
@@ -374,13 +417,12 @@ export default function App() {
 
     soundFX.playClick();
     
-    const currentRooms = fetchRoomsLocal();
-    const room = currentRooms[0] || {
+    const room = activeRoom || rooms[0] || {
       id: 'default_room',
-      code: '123456',
+      code: '100529',
       title: 'Arena Principal',
       subject: selectedTheme,
-      questions: THEME_PRESETS[selectedTheme] || THEME_PRESETS["Geografia"],
+      questions: THEME_PRESETS["Geografia"],
       players: [],
       chairs: Array(60).fill(null),
       teams: Array.from({length: 10}, (_, i) => ({ id: i+1, name: `Equipe ${i+1}`, members: [] }))
@@ -408,7 +450,7 @@ export default function App() {
     }
 
     room.players.push(newPlayer);
-    saveRoomsLocal(currentRooms);
+    saveRoomToCloudAndLocal(room);
     setActiveRoom(room);
     setStudent(newPlayer);
     setView('student_room_entry');
@@ -416,13 +458,11 @@ export default function App() {
 
   const updateRoomStatus = (status: string, qIndex?: number) => {
     soundFX.playClick();
-    const currentRooms = fetchRoomsLocal();
-    const room = currentRooms.find((r: any) => r.code === activeRoom.code);
-    if (room) {
-      if (status !== undefined) room.status = status;
-      if (qIndex !== undefined) room.currentQuestionIndex = qIndex;
-      saveRoomsLocal(currentRooms);
-      setActiveRoom({ ...room });
+    if (activeRoom) {
+      activeRoom.status = status;
+      if (qIndex !== undefined) activeRoom.currentQuestionIndex = qIndex;
+      saveRoomToCloudAndLocal(activeRoom);
+      setActiveRoom({ ...activeRoom });
     }
   };
 
@@ -492,10 +532,10 @@ export default function App() {
           <div className="flex-1 flex flex-col items-center justify-center text-center my-auto py-16">
             <div className="inline-flex items-center space-x-2 px-6 py-2 rounded-full bg-[#07262c] border border-cyan-500/40 text-cyan-300 text-xs md:text-sm font-bold mb-8 shadow-lg">
               <Sparkles className="w-4 h-4 text-amber-400 animate-spin" />
-              <span>SALA DE AULA GAMIFICADA (INDIVIDUAL OU EQUIPE)</span>
+              <span>SALA DE AULA GAMIFICADA EM TEMPO REAL</span>
             </div>
 
-            <div className="relative group cursor-pointer mb-10" onClick={() => { setView('student_mode_select'); soundFX.playClick(); }}>
+            <div className="relative group cursor-pointer mb-10" onClick={() => { setView('student_enter_pin'); soundFX.playClick(); }}>
               <div className="absolute -inset-1 bg-gradient-to-r from-amber-400 to-yellow-300 rounded-3xl blur-xl opacity-50 group-hover:opacity-100 transition duration-500"></div>
               <div className="relative bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-slate-950 px-12 py-8 rounded-3xl shadow-2xl border-2 border-yellow-200 transform transition group-hover:scale-105">
                 <h2 className="text-4xl md:text-6xl font-black tracking-tight drop-shadow-sm">
@@ -508,15 +548,61 @@ export default function App() {
             </div>
 
             <p className="text-cyan-200/80 text-base md:text-lg max-w-xl mb-10 font-medium">
-              Escolha entre Sala Individual ou em Equipe, escolha sua cadeira, digite seu nome, entre na sala de jogo e vá para a Arena de Jogos!
+              Digite o PIN da sala aberta pelo professor, escolha o modo Individual ou Equipe, escolha sua cadeira e vá para a Arena de Jogos!
             </p>
 
             <button
-              onClick={() => { setView('student_mode_select'); soundFX.playClick(); }}
-              className="px-8 py-4 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-lg shadow-xl shadow-cyan-500/30 transition transform hover:scale-105"
+              onClick={() => { setView('student_enter_pin'); soundFX.playClick(); }}
+              className="px-8 py-4 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-lg shadow-xl shadow-cyan-500/30 transition transform hover:scale-105 flex items-center space-x-2"
             >
-              ENTRAR NA SALA DE JOGO 🚀
+              <Key className="w-5 h-5" />
+              <span>ENTRAR NA SALA DE JOGO 🚀</span>
             </button>
+          </div>
+        )}
+
+        {/* 1.1 STUDENT ENTER PIN SCREEN */}
+        {view === 'student_enter_pin' && (
+          <div className="flex-1 flex flex-col items-center justify-center max-w-md mx-auto w-full py-12">
+            <div className="w-full bg-[#07262c] border border-cyan-500/30 rounded-3xl p-8 shadow-2xl space-y-6">
+              <div className="text-center">
+                <div className="w-14 h-14 rounded-2xl bg-cyan-400/20 border border-cyan-400/40 flex items-center justify-center mx-auto mb-4">
+                  <Key className="w-7 h-7 text-cyan-400" />
+                </div>
+                <h2 className="text-2xl font-black text-white">Entrar com PIN da Sala</h2>
+                <p className="text-sm text-cyan-300/70 mt-1">Digite o PIN fornecido pelo professor</p>
+              </div>
+
+              <form onSubmit={handleVerifyStudentPin} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-cyan-300 mb-1.5">PIN da Sala</label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    value={studentPinInput}
+                    onChange={(e) => setStudentPinInput(e.target.value)}
+                    placeholder="Ex: 100529"
+                    className="w-full bg-slate-950 border border-cyan-500/40 rounded-xl px-4 py-3 text-center text-2xl tracking-widest text-white placeholder-cyan-800 focus:outline-none focus:border-amber-400 font-mono"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-lg shadow-xl shadow-amber-500/20 transition mt-4"
+                >
+                  Acessar Sala ➔
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => { setView('home'); soundFX.playClick(); }}
+                  className="w-full py-3 rounded-2xl bg-slate-950 border border-cyan-500/30 text-cyan-300 font-bold text-sm transition"
+                >
+                  Voltar
+                </button>
+              </form>
+            </div>
           </div>
         )}
 
@@ -529,7 +615,7 @@ export default function App() {
                   <Lock className="w-7 h-7 text-amber-400" />
                 </div>
                 <h2 className="text-2xl font-black text-white">Painel do Professor</h2>
-                <p className="text-sm text-cyan-300/70 mt-1">Acesso exclusivo para professores</p>
+                <p className="text-sm text-cyan-300/70 mt-1">Usuário: arenadejogos | Senha: 100529</p>
               </div>
 
               <form onSubmit={handleTeacherLogin} className="space-y-4">
@@ -562,6 +648,14 @@ export default function App() {
                   className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-lg shadow-xl shadow-amber-500/20 transition mt-4"
                 >
                   Entrar no Painel ➔
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => { setView('home'); soundFX.playClick(); }}
+                  className="w-full py-3 rounded-2xl bg-slate-950 border border-cyan-500/30 text-cyan-300 font-bold text-sm transition"
+                >
+                  Voltar
                 </button>
               </form>
             </div>
@@ -629,8 +723,7 @@ export default function App() {
                           <button
                             onClick={() => {
                               if (confirm(`Deseja apagar permanentemente a sala "${room.title}" (PIN: ${room.code})?`)) {
-                                const current = fetchRoomsLocal().filter((r: any) => r.code !== room.code);
-                                saveRoomsLocal(current);
+                                deleteRoomFromCloudAndLocal(room.id, room.code);
                               }
                             }}
                             className="p-2 rounded-xl bg-red-600/20 border border-red-500/40 hover:bg-red-600/30 text-red-300 transition"
@@ -740,13 +833,13 @@ export default function App() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-cyan-200 mb-2">PIN de Acesso (Ex: 123456)</label>
+                  <label className="block text-sm font-bold text-cyan-200 mb-2">PIN de Acesso (Ex: 100529)</label>
                   <input
                     type="text"
                     maxLength={6}
                     value={customPin}
                     onChange={(e) => setCustomPin(e.target.value)}
-                    placeholder="Novo PIN ou manter atual"
+                    placeholder="Novo PIN ou automático"
                     className="w-full bg-slate-950 border border-cyan-500/40 rounded-xl px-4 py-3 text-white placeholder-cyan-700 focus:outline-none focus:border-amber-400"
                   />
                 </div>
@@ -791,17 +884,24 @@ export default function App() {
                     Pausar Jogo
                   </button>
                 )}
+
+                <button
+                  onClick={() => { setView('teacher_dashboard'); soundFX.playClick(); }}
+                  className="px-4 py-3 rounded-2xl bg-slate-950 border border-cyan-500/30 text-cyan-300 font-bold transition"
+                >
+                  Voltar ao Painel
+                </button>
               </div>
             </div>
 
             <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 text-center">
-              <h3 className="text-xl font-bold text-white mb-2">Alunos Conectados na Sala: {activeRoom.players.length}</h3>
+              <h3 className="text-xl font-bold text-white mb-2">Alunos Conectados na Sala: {activeRoom.players?.length || 0}</h3>
               <div className="flex flex-wrap gap-3 justify-center mt-4">
-                {activeRoom.players.map((p: any) => (
+                {activeRoom.players?.map((p: any) => (
                   <div key={p.id} className="bg-slate-950 border border-cyan-900 px-4 py-2 rounded-xl flex items-center space-x-2">
                     <span className="text-xl">{p.avatar}</span>
                     <span className="font-bold text-sm text-amber-300">{p.name}</span>
-                    <span className="text-xs text-cyan-400">({p.mode === 'individual' ? `Cadeira #${p.chairNumber + 1}` : `Equipe ${p.teamId}`})</span>
+                    <span className="text-xs text-cyan-400">({p.mode === 'individual' ? `Cadeira #${(p.chairNumber ?? 0) + 1}` : `Equipe ${p.teamId}`})</span>
                   </div>
                 ))}
               </div>
@@ -810,8 +910,12 @@ export default function App() {
         )}
 
         {/* 5. STUDENT MODE SELECT (INDIVIDUAL OU EQUIPE) */}
-        {view === 'student_mode_select' && (
+        {view === 'student_mode_select' && activeRoom && (
           <div className="flex-1 flex flex-col items-center justify-center max-w-xl mx-auto w-full py-12 text-center space-y-6">
+            <div className="inline-block bg-amber-400/20 border border-amber-400 text-amber-400 text-xs font-bold px-4 py-1.5 rounded-full">
+              Sala: {activeRoom.title} (PIN: {activeRoom.code})
+            </div>
+
             <h2 className="text-4xl font-black text-white">Escolha o Modo de Jogo</h2>
             <p className="text-cyan-300/80 text-sm">Como você deseja participar da aula?</p>
 
@@ -838,15 +942,22 @@ export default function App() {
                 <p className="text-xs text-cyan-300/70">Escolha uma das 10 equipes (6 cadeiras cada) e jogue em grupo.</p>
               </div>
             </div>
+
+            <button
+              onClick={() => { setView('student_enter_pin'); soundFX.playClick(); }}
+              className="mt-4 px-6 py-2 rounded-xl bg-slate-950 border border-cyan-500/30 text-cyan-300 font-bold text-xs"
+            >
+              ← Digitar Outro PIN
+            </button>
           </div>
         )}
 
         {/* 6. INDIVIDUAL CHAIR SELECTION (60 CHAIRS) */}
-        {view === 'student_individual_chair' && (
+        {view === 'student_individual_chair' && activeRoom && (
           <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full py-6 space-y-6">
             <div className="text-center">
               <h2 className="text-2xl font-black text-white">Sala Individual - Escolha sua Cadeira (1 a 60)</h2>
-              <p className="text-cyan-300/70 text-sm">Digite seu nome, escolha seu avatar e clique em uma cadeira livre</p>
+              <p className="text-cyan-300/70 text-sm">Sala: {activeRoom.title} | Digite seu nome, escolha seu avatar e clique em uma cadeira livre</p>
             </div>
 
             <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 shadow-xl space-y-6">
@@ -883,14 +994,17 @@ export default function App() {
               <div className="grid grid-cols-6 sm:grid-cols-10 gap-2 max-h-[350px] overflow-y-auto pr-2">
                 {Array(60).fill(null).map((_, idx) => {
                   const isSelected = selectedChair === idx;
+                  const isOccupied = activeRoom.chairs?.[idx] != null;
                   return (
                     <button
                       key={idx}
+                      disabled={isOccupied}
                       onClick={() => { setSelectedChair(idx); soundFX.playClick(); }}
-                      className={`p-2.5 rounded-xl border flex flex-col items-center justify-center text-xs font-bold transition ${isSelected ? 'bg-amber-400 border-yellow-200 text-slate-950 scale-105 shadow-lg' : 'bg-slate-950 border-cyan-800/60 hover:bg-[#0a353d] text-cyan-200'}`}
+                      className={`p-2.5 rounded-xl border flex flex-col items-center justify-center text-xs font-bold transition ${isOccupied ? 'bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed opacity-50' : isSelected ? 'bg-amber-400 border-yellow-200 text-slate-950 scale-105 shadow-lg' : 'bg-slate-950 border-cyan-800/60 hover:bg-[#0a353d] text-cyan-200'}`}
                     >
                       <Armchair className="w-5 h-5 mb-1" />
                       <span>{idx + 1}</span>
+                      {isOccupied && <span className="text-[9px] text-red-400">Ocupada</span>}
                     </button>
                   );
                 })}
@@ -908,11 +1022,11 @@ export default function App() {
         )}
 
         {/* 7. TEAM ROOMS SELECT (10 teams x 6 chairs) */}
-        {view === 'student_team_select' && (
+        {view === 'student_team_select' && activeRoom && (
           <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full py-6 space-y-6">
             <div className="text-center">
               <h2 className="text-2xl font-black text-white">Sala em Equipe (10 Salas x 6 Cadeiras)</h2>
-              <p className="text-cyan-300/70 text-sm">Digite seu nome, escolha sua equipe e sua vaga</p>
+              <p className="text-cyan-300/70 text-sm">Sala: {activeRoom.title} | Digite seu nome, escolha sua equipe e sua vaga</p>
             </div>
 
             <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 shadow-xl space-y-6">
@@ -947,33 +1061,42 @@ export default function App() {
 
               {/* 10 Teams List */}
               <div className="space-y-4 max-h-[350px] overflow-y-auto pr-2">
-                {Array.from({length: 10}, (_, teamIdx) => teamIdx + 1).map((teamId) => (
-                  <div key={teamId} className="bg-slate-950 border border-cyan-900/60 rounded-2xl p-4 space-y-3">
-                    <h4 className="font-black text-white flex items-center space-x-2">
-                      <UsersRound className="w-5 h-5 text-amber-400" />
-                      <span>Equipe {teamId}</span>
-                    </h4>
+                {Array.from({length: 10}, (_, teamIdx) => teamIdx + 1).map((teamId) => {
+                  const teamObj = activeRoom.teams?.find((t: any) => t.id === teamId) || { members: [] };
+                  return (
+                    <div key={teamId} className="bg-slate-950 border border-cyan-900/60 rounded-2xl p-4 space-y-3">
+                      <h4 className="font-black text-white flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <UsersRound className="w-5 h-5 text-amber-400" />
+                          <span>Equipe {teamId}</span>
+                        </div>
+                        <span className="text-xs text-cyan-400 font-normal">{teamObj.members?.length || 0}/6 membros</span>
+                      </h4>
 
-                    <div className="grid grid-cols-6 gap-2">
-                      {Array.from({length: 6}, (_, chairIdx) => {
-                        const isSelectedTeam = selectedTeamRoom === teamId;
-                        const isSelectedChair = selectedChair === chairIdx;
-                        const isThisSeatSelected = isSelectedTeam && isSelectedChair;
+                      <div className="grid grid-cols-6 gap-2">
+                        {Array.from({length: 6}, (_, chairIdx) => {
+                          const isSelectedTeam = selectedTeamRoom === teamId;
+                          const isSelectedChair = selectedChair === chairIdx;
+                          const isThisSeatSelected = isSelectedTeam && isSelectedChair;
+                          const isOccupied = (teamObj.members?.length || 0) > chairIdx;
 
-                        return (
-                          <button
-                            key={chairIdx}
-                            onClick={() => { setSelectedTeamRoom(teamId); setSelectedChair(chairIdx); soundFX.playClick(); }}
-                            className={`p-3 rounded-xl border flex flex-col items-center justify-center text-xs font-bold transition ${isThisSeatSelected ? 'bg-amber-400 border-yellow-200 text-slate-950 scale-105 shadow-lg' : 'bg-[#07262c] border-cyan-800 hover:bg-[#0a353d] text-cyan-200'}`}
-                          >
-                            <Armchair className="w-5 h-5 mb-1" />
-                            <span>Vaga {chairIdx + 1}</span>
-                          </button>
-                        );
-                      })}
+                          return (
+                            <button
+                              key={chairIdx}
+                              disabled={isOccupied}
+                              onClick={() => { setSelectedTeamRoom(teamId); setSelectedChair(chairIdx); soundFX.playClick(); }}
+                              className={`p-3 rounded-xl border flex flex-col items-center justify-center text-xs font-bold transition ${isOccupied ? 'bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed opacity-50' : isThisSeatSelected ? 'bg-amber-400 border-yellow-200 text-slate-950 scale-105 shadow-lg' : 'bg-[#07262c] border-cyan-800 hover:bg-[#0a353d] text-cyan-200'}`}
+                            >
+                              <Armchair className="w-5 h-5 mb-1" />
+                              <span>Vaga {chairIdx + 1}</span>
+                              {isOccupied && <span className="text-[9px] text-red-400">Ocupada</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <button
@@ -1005,7 +1128,7 @@ export default function App() {
             <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 w-full space-y-3">
               <div className="flex items-center justify-center space-x-2 text-cyan-300 font-bold">
                 <Users className="w-5 h-5 text-amber-400" />
-                <span>Alunos na Sala: {activeRoom.players.length}</span>
+                <span>Alunos na Sala: {activeRoom.players?.length || 1}</span>
               </div>
               <p className="text-xs text-cyan-300/60">
                 Tudo pronto! Clique abaixo para ir para a Arena de Jogos e resolver as questões propostas pelo professor.
@@ -1043,7 +1166,7 @@ export default function App() {
             </div>
 
             <div>
-              <h3 className="text-xl font-black text-white mb-4">🎮 Arena de Jogos - Escolha um Jogo</h3>
+              <h3 className="text-xl font-black text-white mb-4">🎮 Arena de Jogos - Escolha um Jogo ({activeRoom?.subject || 'Geral'})</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {[
                   { id: 'quiz', title: 'Quiz Múltipla Escolha', desc: 'Responda rápido e ganhe pontos!', color: 'from-blue-600 to-cyan-600' },

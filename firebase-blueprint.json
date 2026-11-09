@@ -1,0 +1,26 @@
+{
+  "entities": {
+    "Room": {
+      "title": "Room",
+      "description": "Game room created by teacher with PIN and questions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "title": { "type": "string" },
+        "subject": { "type": "string" },
+        "gameType": { "type": "string" },
+        "status": { "type": "string" },
+        "currentQuestionIndex": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "code", "title", "subject", "gameType", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/rooms/{roomId}": {
+      "schema": { "$ref": "Room" },
+      "description": "Rooms collection for Arena de Jogos"
+    }
+  }
+}
