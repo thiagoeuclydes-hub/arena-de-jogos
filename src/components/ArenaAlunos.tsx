@@ -247,6 +247,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
 
   const currentRodadaId = selectedSala?.rodadaId || 0;
   const hasAnsweredCurrentRodada = lastRodadaAnswered === currentRodadaId;
+  const corEscolhidaProfessor = selectedSala?.corRodada ? selectedSala.corRodada.toUpperCase() : '...';
 
   if (!isFirebaseConfigured) {
     return (
@@ -543,7 +544,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                       <div className="flex items-start justify-between">
                         <div>
                           <h4 className="text-2xl font-black text-white mb-2">🎨 JOGO DAS CORES</h4>
-                          <p className="text-sm text-white/90">Ouça o comando do professor, clique na cor correta e acumule pontos!</p>
+                          <p className="text-sm text-white/90">Ouça o comando do professor, evite a cor escolhida e acumule pontos!</p>
                         </div>
                         <span className={`px-4 py-1.5 rounded-full text-xs font-black uppercase ${isUnlocked ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}>
                           {isUnlocked ? 'liberado 🔓' : 'trancado 🔒'}
@@ -561,7 +562,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
             </div>
           )}
 
-          {/* STEP 6: PLAY JOGO DAS CORES (6 CORES, 1ª VALE, 2ª TRAVADA ATÉ O PROFESSOR MUDAR) */}
+          {/* STEP 6: PLAY JOGO DAS CORES (TODAS AS CORES COM O NOME DA COR ESCOLHIDA PELO PROFESSOR) */}
           {step === 'play_jogo_cores' && selectedSala && (
             <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 md:p-8 shadow-xl space-y-6 max-w-2xl mx-auto w-full text-center">
               
@@ -585,35 +586,38 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
 
                 {!selectedSala.corRodada ? (
                   <div className="text-sm text-cyan-300/80 bg-slate-950 p-8 rounded-2xl border border-cyan-900 space-y-2">
-                    <p className="font-bold">Aguardando o professor escolher a cor da rodada...</p>
+                    <p className="font-bold">Aguardando o professor escolher a cor no painel...</p>
                     <p className="text-xs text-cyan-400/60">Ouça o comando por voz do professor!</p>
                   </div>
                 ) : (
                   <div className="space-y-6">
                     <div className="bg-slate-950 p-6 rounded-2xl border-2 border-purple-500/60 shadow-lg space-y-2">
-                      <span className="text-xs uppercase font-black text-purple-300 tracking-wider block">🎤 Obre o Comando do Professor:</span>
+                      <span className="text-xs uppercase font-black text-purple-300 tracking-wider block">🎤 Comando do Professor:</span>
+                      <p className="text-sm font-black text-amber-400">
+                        Todas as cores exibem: "{corEscolhidaProfessor}"
+                      </p>
                       <p className="text-xs text-cyan-300/80">
-                        Cada acerto: <strong className="text-emerald-400">+10 pts</strong> | Cada erro: <strong className="text-red-400">-5 pts</strong>
+                        ⚠️ Aperte a cor que o professor <strong>NÃO</strong> escolheu! (Certa: <strong className="text-emerald-400">+10 pts</strong> | Errada/Escolha do Prof: <strong className="text-red-400">-5 pts</strong>)
                       </p>
                       {hasAnsweredCurrentRodada ? (
                         <div className="p-3 bg-amber-500/20 border border-amber-500/40 rounded-xl text-amber-300 font-bold text-xs">
-                          🔒 Você já respondeu nesta rodada! Aguarde o professor mudar a cor para a próxima rodada.
+                          🔒 1ª cor registrada! A 2ª cor está travada. Aguarde o professor mudar a cor para a próxima rodada.
                         </div>
                       ) : (
                         <div className="p-3 bg-emerald-500/20 border border-emerald-500/40 rounded-xl text-emerald-300 font-bold text-xs">
-                          🔓 Rodada Liberada! Escolha uma cor (A 1ª vale, a 2ª trava).
+                          🔓 Rodada Liberada! A 1ª cor que você apertar vale.
                         </div>
                       )}
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                       {[
-                        { key: 'vermelho', label: 'VERMELHO', color: 'bg-red-600 hover:bg-red-500 text-white border-red-400' },
-                        { key: 'azul', label: 'AZUL', color: 'bg-blue-600 hover:bg-blue-500 text-white border-blue-400' },
-                        { key: 'amarelo', label: 'AMARELO', color: 'bg-yellow-400 hover:bg-yellow-300 text-slate-950 border-yellow-200' },
-                        { key: 'verde', label: 'VERDE', color: 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400' },
-                        { key: 'laranja', label: 'LARANJA', color: 'bg-orange-500 hover:bg-orange-400 text-white border-orange-400' },
-                        { key: 'roxo', label: 'ROXO', color: 'bg-purple-600 hover:bg-purple-500 text-white border-purple-400' }
+                        { key: 'vermelho', label: corEscolhidaProfessor, color: 'bg-red-600 hover:bg-red-500 text-white border-red-400' },
+                        { key: 'azul', label: corEscolhidaProfessor, color: 'bg-blue-600 hover:bg-blue-500 text-white border-blue-400' },
+                        { key: 'amarelo', label: corEscolhidaProfessor, color: 'bg-yellow-400 hover:bg-yellow-300 text-slate-950 border-yellow-200' },
+                        { key: 'verde', label: corEscolhidaProfessor, color: 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400' },
+                        { key: 'laranja', label: corEscolhidaProfessor, color: 'bg-orange-500 hover:bg-orange-400 text-white border-orange-400' },
+                        { key: 'roxo', label: corEscolhidaProfessor, color: 'bg-purple-600 hover:bg-purple-500 text-white border-purple-400' }
                       ].map((c) => (
                         <button
                           key={c.key}
@@ -622,16 +626,16 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                             if (hasAnsweredCurrentRodada) return;
 
                             setLastRodadaAnswered(currentRodadaId);
-                            const correctColor = selectedSala.corRodada;
-                            const isCorrect = c.key === correctColor;
+                            const prohibitedColor = selectedSala.corRodada;
+                            const isProhibited = c.key === prohibitedColor;
 
-                            if (isCorrect) {
-                              addScorePoints(10);
-                              setFeedbackMsg({ text: `🎉 Acertou! Escolheu ${c.label}! +10 pts`, correct: true });
-                              confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
-                            } else {
+                            if (isProhibited) {
                               addScorePoints(-5);
-                              setFeedbackMsg({ text: `❌ Errou! Escolheu ${c.label} (Cor correta era ${correctColor})! -5 pts`, correct: false });
+                              setFeedbackMsg({ text: `❌ Errou! Você clicou na cor escolhida pelo professor (${c.key.toUpperCase()})! -5 pts`, correct: false });
+                            } else {
+                              addScorePoints(10);
+                              setFeedbackMsg({ text: `🎉 Acertou! Você escolheu a cor correta (${c.key.toUpperCase()})! +10 pts`, correct: true });
+                              confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
                             }
                           }}
                           className={`p-6 rounded-2xl border-4 font-black text-sm md:text-lg shadow-xl transition transform ${hasAnsweredCurrentRodada ? 'opacity-50 cursor-not-allowed bg-slate-900 border-slate-800 text-slate-500' : `hover:scale-105 ${c.color}`}`}
