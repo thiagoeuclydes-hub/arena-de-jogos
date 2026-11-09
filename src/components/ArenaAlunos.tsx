@@ -521,7 +521,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                   <div className="space-y-2 max-w-md mx-auto">
                     <h4 className="text-2xl font-black text-white">Cadeira Garantida!</h4>
                     <p className="text-sm text-cyan-300/80">
-                      Aguardando o professor liberar os jogos na Arena... Assim que liberados, os jogos abaixo aparecerão para você!
+                      Aguardando o professor liberar o próximo jogo na Arena... Fique atento!
                     </p>
                   </div>
                   <div className="inline-block px-6 py-2 rounded-full bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs font-bold animate-bounce">
@@ -529,40 +529,34 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                   </div>
                 </div>
               ) : (
-                <div className="space-y-6">
-                  <div className="flex items-center space-x-2 bg-emerald-500/20 border border-emerald-500/40 p-4 rounded-2xl text-emerald-300 font-bold text-sm">
-                    <Unlock className="w-5 h-5 text-emerald-400" />
-                    <span>🎉 O Professor liberou a Arena de Jogos! Escolha um jogo abaixo para começar:</span>
+                <div className="bg-slate-950 border border-emerald-500/50 rounded-3xl p-8 md:p-12 text-center space-y-6 shadow-2xl">
+                  <div className="w-20 h-20 rounded-full bg-emerald-500/20 border-2 border-emerald-400 flex items-center justify-center mx-auto text-emerald-400 animate-bounce">
+                    <Unlock className="w-10 h-10" />
+                  </div>
+                  <div className="space-y-2 max-w-md mx-auto">
+                    <h4 className="text-3xl font-black text-white">Jogo Liberado pelo Professor!</h4>
+                    <p className="text-lg font-black text-amber-400 uppercase tracking-wide">
+                      {selectedSala.jogoAtivo === 'jogo_das_cores' && '🎨 Jogo das Cores'}
+                      {selectedSala.jogoAtivo === 'quiz' && '🧠 Quiz de Conhecimentos'}
+                      {selectedSala.jogoAtivo === 'verdadeiro_falso' && '⚖️ Verdadeiro ou Falso'}
+                      {selectedSala.jogoAtivo === 'forca' && '🔤 Jogo da Forca'}
+                    </p>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {[
-                      { id: 'jogo_das_cores', title: 'Jogo das Cores', desc: 'Não aperte na cor escolhida pelo professor!', color: 'from-purple-600 to-pink-600' },
-                      { id: 'quiz', title: 'Quiz', desc: 'Múltipla escolha de conhecimentos', color: 'from-blue-600 to-cyan-600' },
-                      { id: 'verdadeiro_falso', title: 'Verdadeiro ou Falso', desc: 'Afirmações rápidas', color: 'from-emerald-600 to-teal-600' },
-                      { id: 'forca', title: 'Forca', desc: 'Adivinhe a palavra secreta', color: 'from-amber-600 to-yellow-600' }
-                    ].map((g) => (
-                      <div
-                        key={g.id}
-                        onClick={() => {
-                          setActiveGame(g.id as any);
-                          setStep('play_game');
-                          setQuestionIdx(0);
-                          setSelectedAnswer(null);
-                          setAnsweredResult(null);
-                        }}
-                        className={`bg-gradient-to-br ${g.color} border border-white/20 p-6 rounded-3xl cursor-pointer shadow-xl transition transform hover:scale-105 flex flex-col justify-between`}
-                      >
-                        <div>
-                          <h4 className="text-xl font-black text-white mb-2">{g.title}</h4>
-                          <p className="text-xs text-white/80">{g.desc}</p>
-                        </div>
-                        <div className="mt-6 inline-flex items-center space-x-2 text-white font-black text-sm">
-                          <span>Jogar Agora ➔</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <button
+                    onClick={() => {
+                      setActiveGame(selectedSala.jogoAtivo || 'quiz');
+                      setStep('play_game');
+                      setQuestionIdx(0);
+                      setSelectedAnswer(null);
+                      setAnsweredResult(null);
+                      setFeedbackColorMsg(null);
+                    }}
+                    className="px-8 py-5 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xl shadow-2xl transition transform hover:scale-105 inline-flex items-center space-x-3"
+                  >
+                    <Gamepad2 className="w-6 h-6" />
+                    <span>ENTRAR NO JOGO AGORA ➔</span>
+                  </button>
                 </div>
               )}
 
@@ -587,26 +581,17 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
               {activeGame === 'jogo_das_cores' && (
                 <div className="space-y-6">
                   <div className="inline-block bg-purple-600/30 border border-purple-400 text-purple-300 text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-widest">
-                    JOGO DAS CORES
-                  </div>
-
-                  <div className="bg-red-500/20 border-2 border-red-500 p-6 rounded-3xl space-y-2 shadow-2xl">
-                    <h3 className="text-xl md:text-2xl font-black text-red-400 uppercase tracking-wide">
-                      NÃO PODE APERTAR NA COR:
-                    </h3>
-                    <div className="text-2xl md:text-3xl font-black text-amber-300 uppercase tracking-wider bg-slate-950 py-3 px-6 rounded-2xl inline-block border border-amber-400/40 shadow-inner">
-                      {selectedSala.corProibida ? selectedSala.corProibida : 'Aguardando o professor escolher...'}
-                    </div>
+                    JOGO DAS CORES &bull; SUA PLACAR: {score} PTS
                   </div>
 
                   {!selectedSala.corProibida ? (
                     <div className="text-sm text-cyan-300/80 bg-slate-950 p-6 rounded-2xl border border-cyan-900">
-                      O professor ainda não definiu a cor proibida. Aguarde o professor escolher uma cor no painel dele!
+                      Aguardando o professor escolher a cor no painel dele...
                     </div>
                   ) : (
                     <div className="space-y-4">
                       <p className="text-xs font-bold text-cyan-300">
-                        Clique em qualquer cor <strong>DIFERENTE</strong> da cor proibida acima (+10 pts por acerto, -5 pts por erro):
+                        Escolha uma cor abaixo (+10 pts por acerto, -5 pts por erro):
                       </p>
 
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
@@ -625,7 +610,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                               if (isForbidden) {
                                 addScorePoints(-5);
                                 setAnsweredResult(false);
-                                setFeedbackColorMsg(`❌ Errou! Você clicou na cor proibida (${c.label})! -5 pts`);
+                                setFeedbackColorMsg(`❌ Errou! Cor proibida (${c.label})! -5 pts`);
                               } else {
                                 addScorePoints(10);
                                 setAnsweredResult(true);
