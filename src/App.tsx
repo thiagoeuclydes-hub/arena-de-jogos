@@ -7,7 +7,7 @@ import {
 import confetti from 'canvas-confetti';
 import * as XLSX from 'xlsx';
 
-// Firebase imports
+// Firebase imports with graceful fallback
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, doc, setDoc, getDocs, onSnapshot, deleteDoc } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
@@ -15,10 +15,10 @@ import firebaseConfig from '../firebase-applet-config.json';
 let db: any = null;
 try {
   const app = initializeApp(firebaseConfig);
-  db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId);
+  db = getFirestore(app);
   console.log("Firebase initialized successfully");
 } catch (e) {
-  console.error("Firebase init error:", e);
+  console.warn("Firebase init skipped or failed, using local storage:", e);
 }
 
 // Sound effects generator using Web Audio API
@@ -119,12 +119,22 @@ const THEME_PRESETS: Record<string, any[]> = {
   ]
 };
 
+const DEFAULT_ROOMS = [
+  { id: 'room_1', code: '100529', title: 'Sala 1 - Geografia Global', subject: 'Geografia', gameType: 'quiz', status: 'waiting', currentQuestionIndex: -1, questions: THEME_PRESETS["Geografia"], players: [], teams: Array.from({length: 10}, (_, i) => ({ id: i+1, name: `Equipe ${i+1}`, members: [] })), chairs: Array(60).fill(null), createdAt: Date.now() },
+  { id: 'room_2', code: '555555', title: 'Sala 5 - Jogo das Cores', subject: 'Ciências', gameType: 'quiz', status: 'waiting', currentQuestionIndex: -1, questions: THEME_PRESETS["Ciências"], players: [], teams: Array.from({length: 10}, (_, i) => ({ id: i+1, name: `Equipe ${i+1}`, members: [] })), chairs: Array(60).fill(null), createdAt: Date.now() }
+];
+
 export default function App() {
   const [view, setView] = useState<'home' | 'teacher_login' | 'teacher_dashboard' | 'create_room' | 'student_enter_pin' | 'student_mode_select' | 'student_individual_chair' | 'student_team_select' | 'student_room_entry' | 'student_game_hub' | 'student_active_game' | 'teacher_live_control'>('home');
-  const [rooms, setRooms] = useState<any[]>([
-    { id: 'room_1', code: '100529', title: 'Sala 1 - Geografia Global', subject: 'Geografia', gameType: 'quiz', status: 'waiting', currentQuestionIndex: -1, questions: THEME_PRESETS["Geografia"], players: [], teams: Array.from({length: 10}, (_, i) => ({ id: i+1, name: `Equipe ${i+1}`, members: [] })), chairs: Array(60).fill(null), createdAt: Date.now() },
-    { id: 'room_2', code: '555555', title: 'Sala 5 - Jogo das Cores', subject: 'Ciências', gameType: 'quiz', status: 'waiting', currentQuestionIndex: -1, questions: THEME_PRESETS["Ciências"], players: [], teams: Array.from({length: 10}, (_, i) => ({ id: i+1, name: `Equipe ${i+1}`, members: [] })), chairs: Array(60).fill(null), createdAt: Date.now() }
-  ]);
+  const [rooms, setRooms] = useState<any[]>(() => {
+    try {
+      const local = localStorage.getItem('arenadejogos_rooms');
+      if (local) return JSON.parse(local);
+    } catch (e) {
+      console.error(e);
+    }
+    return DEFAULT_ROOMS;
+  });
   const [activeRoom, setActiveRoom] = useState<any>(null);
   const [studentPinInput, setStudentPinInput] = useState('');
   const [student, setStudent] = useState<any>(null);
@@ -141,8 +151,6 @@ export default function App() {
   const [roomSubject, setRoomSubject] = useState('');
   const [selectedTheme, setSelectedTheme] = useState('Geografia');
   const [gameType, setGameType] = useState<'quiz' | 'verdadeiro_falso' | 'forca' | 'cores' | 'stop'>('quiz');
-  const [aiTopic, setAiTopic] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
   const [questions, setQuestions] = useState<any[]>(THEME_PRESETS["Geografia"]);
   
   // Student join & chair selection states
@@ -153,16 +161,16 @@ export default function App() {
   const [selectedTeamRoom, setSelectedTeamRoom] = useState<number | null>(null);
 
   // Active game in Arena
-  const [activeGameType, setActiveGameType] = useState<'quiz' | 'forca' | 'verdadeiro_falso' | 'cores' | 'stop'>('quiz');
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [hasAnswered, setHasAnswered] = useState(false);
   const [answerResult, setAnswerResult] = useState<boolean | null>(null);
 
   // Sync with Firebase Firestore & localStorage fallback
   useEffect(() => {
+    let unsubscribe: any = null;
     if (db) {
       try {
-        const unsubscribe = onSnapshot(collection(db, 'rooms'), (snapshot: any) => {
+        unsubscribe = onSnapshot(collection(db, 'rooms'), (snapshot: any) => {
           const loadedRooms: any[] = [];
           snapshot.forEach((docSnap: any) => {
             const data = docSnap.data();
@@ -177,38 +185,19 @@ export default function App() {
           });
           if (loadedRooms.length > 0) {
             setRooms(loadedRooms);
-            localStorage.setItem('ludus_rooms', JSON.stringify(loadedRooms));
-          } else {
-            // Seed initial rooms if empty in Firestore
-            rooms.forEach(async (r) => {
-              await setDoc(doc(db, 'rooms', r.id), r);
-            });
+            localStorage.setItem('arenadejogos_rooms', JSON.stringify(loadedRooms));
           }
         }, (err: any) => {
-          console.error("Firestore snapshot error:", err);
-          loadLocalStorageFallback();
+          console.warn("Firestore snapshot skipped/offline, using localStorage:", err.message);
         });
-        return () => unsubscribe();
       } catch (e) {
-        console.error("Firestore init error:", e);
-        loadLocalStorageFallback();
+        console.warn("Firestore listener error:", e);
       }
-    } else {
-      loadLocalStorageFallback();
     }
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
-
-  const loadLocalStorageFallback = () => {
-    try {
-      const local = localStorage.getItem('ludus_rooms');
-      if (local) {
-        const parsed = JSON.parse(local);
-        setRooms(parsed);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
 
   const saveRoomToCloudAndLocal = async (room: any) => {
     const updated = rooms.map(r => r.id === room.id ? room : r);
@@ -216,13 +205,17 @@ export default function App() {
       updated.unshift(room);
     }
     setRooms(updated);
-    localStorage.setItem('ludus_rooms', JSON.stringify(updated));
+    try {
+      localStorage.setItem('arenadejogos_rooms', JSON.stringify(updated));
+    } catch (e) {
+      console.error(e);
+    }
 
     if (db) {
       try {
         await setDoc(doc(db, 'rooms', room.id), room);
       } catch (e) {
-        console.error("Cloud save error:", e);
+        console.warn("Cloud save failed (using local storage):", e);
       }
     }
   };
@@ -230,13 +223,17 @@ export default function App() {
   const deleteRoomFromCloudAndLocal = async (roomId: string, roomCode: string) => {
     const updated = rooms.filter(r => r.id !== roomId && r.code !== roomCode);
     setRooms(updated);
-    localStorage.setItem('ludus_rooms', JSON.stringify(updated));
+    try {
+      localStorage.setItem('arenadejogos_rooms', JSON.stringify(updated));
+    } catch (e) {
+      console.error(e);
+    }
 
     if (db) {
       try {
         await deleteDoc(doc(db, 'rooms', roomId));
       } catch (e) {
-        console.error("Cloud delete error:", e);
+        console.warn("Cloud delete failed:", e);
       }
     }
   };
@@ -417,16 +414,7 @@ export default function App() {
 
     soundFX.playClick();
     
-    const room = activeRoom || rooms[0] || {
-      id: 'default_room',
-      code: '100529',
-      title: 'Arena Principal',
-      subject: selectedTheme,
-      questions: THEME_PRESETS["Geografia"],
-      players: [],
-      chairs: Array(60).fill(null),
-      teams: Array.from({length: 10}, (_, i) => ({ id: i+1, name: `Equipe ${i+1}`, members: [] }))
-    };
+    const room = activeRoom || rooms[0] || DEFAULT_ROOMS[0];
 
     const playerId = 'player_' + Math.random().toString(36).substring(2, 9);
     const newPlayer = {
@@ -1175,7 +1163,7 @@ export default function App() {
                 ].map((game) => (
                   <div
                     key={game.id}
-                    onClick={() => { setActiveGameType(game.id as any); setView('student_active_game'); soundFX.playClick(); }}
+                    onClick={() => { setView('student_active_game'); soundFX.playClick(); }}
                     className={`bg-gradient-to-br ${game.color} border border-white/20 p-6 rounded-3xl cursor-pointer shadow-xl transition transform hover:scale-105 flex flex-col justify-between`}
                   >
                     <div>
