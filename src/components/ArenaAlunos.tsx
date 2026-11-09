@@ -94,6 +94,20 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
               setMyChairId(Number(savedChairId));
               setNome(chair.nomeAluno || '');
               setAvatar(chair.avatar || '🦁');
+              if (typeof chair.score === 'number') {
+                setScore(chair.score);
+              }
+            }
+          }
+        } else if (selectedSala) {
+          const foundCurrent = list.find(s => s.id === selectedSala.id);
+          if (foundCurrent) {
+            setSelectedSala(foundCurrent);
+            if (myChairId) {
+              const myChair = foundCurrent.cadeiras?.find((c: any) => c.id === myChairId);
+              if (myChair && typeof myChair.score === 'number') {
+                setScore(myChair.score);
+              }
             }
           }
         }
