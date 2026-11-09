@@ -1,0 +1,8 @@
+{
+  "name": "ARENA DE JOGOS - Plataforma de Jogos Educativos",
+  "description": "Painel do professor para criar salas de jogos interativos (Quiz, Forca, Verdadeiro ou Falso) e arena em tempo real para alunos com ranking competitivo.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
