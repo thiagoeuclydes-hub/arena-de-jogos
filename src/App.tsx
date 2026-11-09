@@ -7,7 +7,7 @@ import {
 import confetti from 'canvas-confetti';
 import * as XLSX from 'xlsx';
 
-// Firebase imports with graceful fallback
+// Firebase imports
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, doc, setDoc, getDocs, onSnapshot, deleteDoc } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
@@ -139,6 +139,7 @@ export default function App() {
   const [studentPinInput, setStudentPinInput] = useState('');
   const [student, setStudent] = useState<any>(null);
   const [muted, setMuted] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Teacher Login States
   const [usernameInput, setUsernameInput] = useState('');
@@ -165,8 +166,41 @@ export default function App() {
   const [hasAnswered, setHasAnswered] = useState(false);
   const [answerResult, setAnswerResult] = useState<boolean | null>(null);
 
-  // Sync with Firebase Firestore & localStorage fallback
+  // Fetch rooms from Cloud Firestore manually and via snapshot
+  const fetchRoomsFromCloud = async () => {
+    setIsSyncing(true);
+    if (db) {
+      try {
+        const querySnapshot = await getDocs(collection(db, 'rooms'));
+        const loadedRooms: any[] = [];
+        querySnapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          loadedRooms.push({
+            ...data,
+            id: docSnap.id,
+            chairs: data.chairs || Array(60).fill(null),
+            teams: data.teams || Array.from({length: 10}, (_, i) => ({ id: i+1, name: `Equipe ${i+1}`, members: [] })),
+            players: data.players || [],
+            questions: data.questions || THEME_PRESETS["Geografia"]
+          });
+        });
+        if (loadedRooms.length > 0) {
+          setRooms(loadedRooms);
+          localStorage.setItem('arenadejogos_rooms', JSON.stringify(loadedRooms));
+          if (activeRoom) {
+            const updatedActive = loadedRooms.find(r => r.id === activeRoom.id || r.code === activeRoom.code);
+            if (updatedActive) setActiveRoom(updatedActive);
+          }
+        }
+      } catch (e) {
+        console.warn("Manual cloud fetch failed:", e);
+      }
+    }
+    setIsSyncing(false);
+  };
+
   useEffect(() => {
+    fetchRoomsFromCloud();
     let unsubscribe: any = null;
     if (db) {
       try {
@@ -186,12 +220,16 @@ export default function App() {
           if (loadedRooms.length > 0) {
             setRooms(loadedRooms);
             localStorage.setItem('arenadejogos_rooms', JSON.stringify(loadedRooms));
+            if (activeRoom) {
+              const updatedActive = loadedRooms.find(r => r.id === activeRoom.id || r.code === activeRoom.code);
+              if (updatedActive) setActiveRoom(updatedActive);
+            }
           }
         }, (err: any) => {
-          console.warn("Firestore snapshot skipped/offline, using localStorage:", err.message);
+          console.warn("Firestore snapshot error:", err.message);
         });
       } catch (e) {
-        console.warn("Firestore listener error:", e);
+        console.warn("Firestore listener setup error:", e);
       }
     }
     return () => {
@@ -213,9 +251,10 @@ export default function App() {
 
     if (db) {
       try {
-        await setDoc(doc(db, 'rooms', room.id), room);
+        await setDoc(doc(db, 'rooms', room.id), room, { merge: true });
+        console.log("Room saved to Firestore successfully:", room.id);
       } catch (e) {
-        console.warn("Cloud save failed (using local storage):", e);
+        console.warn("Cloud save failed:", e);
       }
     }
   };
@@ -250,6 +289,7 @@ export default function App() {
       setView('teacher_dashboard');
       setUsernameInput('');
       setPasswordInput('');
+      fetchRoomsFromCloud();
     } else {
       alert('Usuário ou senha do professor incorretos. Use arenadejogos / 100529');
     }
@@ -385,20 +425,22 @@ export default function App() {
     setView('create_room');
   };
 
-  const handleVerifyStudentPin = (e: React.FormEvent) => {
+  const handleVerifyStudentPin = async (e: React.FormEvent) => {
     e.preventDefault();
     soundFX.playClick();
-    const found = rooms.find(r => r.code === studentPinInput.trim());
+    await fetchRoomsFromCloud();
+    const cleanPin = studentPinInput.trim();
+    const found = rooms.find(r => String(r.code) === cleanPin);
     if (found) {
       setActiveRoom(found);
       setView('student_mode_select');
       setStudentPinInput('');
     } else {
-      alert('Sala não encontrada com este PIN. Verifique com o professor o PIN correto.');
+      alert(`Sala não encontrada com o PIN "${cleanPin}". Peça ao professor para confirmar o PIN.`);
     }
   };
 
-  const handleSelectSeatAndEnterRoom = () => {
+  const handleSelectSeatAndEnterRoom = async () => {
     if (!studentName.trim()) {
       alert('Digite seu nome.');
       return;
@@ -414,7 +456,10 @@ export default function App() {
 
     soundFX.playClick();
     
-    const room = activeRoom || rooms[0] || DEFAULT_ROOMS[0];
+    // Fetch latest from cloud to avoid race conditions
+    await fetchRoomsFromCloud();
+    const currentRooms = rooms.length > 0 ? rooms : DEFAULT_ROOMS;
+    const room = currentRooms.find(r => r.id === activeRoom?.id || r.code === activeRoom?.code) || currentRooms[0];
 
     const playerId = 'player_' + Math.random().toString(36).substring(2, 9);
     const newPlayer = {
@@ -428,17 +473,22 @@ export default function App() {
       teamId: playMode === 'team' ? selectedTeamRoom : null
     };
 
+    if (!room.chairs) room.chairs = Array(60).fill(null);
+    if (!room.teams) room.teams = Array.from({length: 10}, (_, i) => ({ id: i+1, name: `Equipe ${i+1}`, members: [] }));
+    if (!room.players) room.players = [];
+
     if (playMode === 'individual') {
       room.chairs[selectedChair as number] = newPlayer;
     } else {
       const team = room.teams.find((t: any) => t.id === selectedTeamRoom);
       if (team) {
+        if (!team.members) team.members = [];
         team.members.push(newPlayer);
       }
     }
 
     room.players.push(newPlayer);
-    saveRoomToCloudAndLocal(room);
+    await saveRoomToCloudAndLocal(room);
     setActiveRoom(room);
     setStudent(newPlayer);
     setView('student_room_entry');
@@ -469,6 +519,12 @@ export default function App() {
       confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
       if (student) {
         student.score = (student.score || 0) + 1000;
+        // Also update student score in room players list
+        if (activeRoom && activeRoom.players) {
+          const p = activeRoom.players.find((pl: any) => pl.id === student.id);
+          if (p) p.score = student.score;
+          saveRoomToCloudAndLocal(activeRoom);
+        }
       }
     } else {
       soundFX.playIncorrect();
@@ -494,6 +550,15 @@ export default function App() {
         </div>
 
         <div className="flex items-center space-x-4">
+          <button 
+            onClick={() => { fetchRoomsFromCloud(); soundFX.playClick(); }}
+            className="p-2.5 rounded-2xl bg-[#07262c] border border-cyan-500/30 hover:bg-[#0a353d] transition text-cyan-300 shadow-md flex items-center space-x-1"
+            title="Atualizar conexão com salas"
+          >
+            <RefreshCw className={`w-5 h-5 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span className="text-xs font-bold hidden md:inline">Sincronizar</span>
+          </button>
+
           <button 
             onClick={toggleSound}
             className="p-2.5 rounded-2xl bg-[#07262c] border border-cyan-500/30 hover:bg-[#0a353d] transition text-cyan-300 shadow-md"
@@ -854,6 +919,14 @@ export default function App() {
               </div>
 
               <div className="flex items-center space-x-3">
+                <button
+                  onClick={() => fetchRoomsFromCloud()}
+                  className="px-4 py-3 rounded-2xl bg-cyan-600/20 border border-cyan-500/40 hover:bg-cyan-600/30 text-cyan-300 font-bold transition flex items-center space-x-2"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                  <span>Atualizar Alunos</span>
+                </button>
+
                 {activeRoom.status === 'waiting' && (
                   <button
                     onClick={() => updateRoomStatus('playing', 0)}
@@ -885,13 +958,17 @@ export default function App() {
             <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 text-center">
               <h3 className="text-xl font-bold text-white mb-2">Alunos Conectados na Sala: {activeRoom.players?.length || 0}</h3>
               <div className="flex flex-wrap gap-3 justify-center mt-4">
-                {activeRoom.players?.map((p: any) => (
-                  <div key={p.id} className="bg-slate-950 border border-cyan-900 px-4 py-2 rounded-xl flex items-center space-x-2">
-                    <span className="text-xl">{p.avatar}</span>
-                    <span className="font-bold text-sm text-amber-300">{p.name}</span>
-                    <span className="text-xs text-cyan-400">({p.mode === 'individual' ? `Cadeira #${(p.chairNumber ?? 0) + 1}` : `Equipe ${p.teamId}`})</span>
-                  </div>
-                ))}
+                {activeRoom.players?.length === 0 ? (
+                  <p className="text-cyan-300/60 text-sm">Nenhum aluno conectado ainda. Abra o app no celular, digite o PIN {activeRoom.code} e escolha sua cadeira/equipe!</p>
+                ) : (
+                  activeRoom.players?.map((p: any) => (
+                    <div key={p.id} className="bg-slate-950 border border-cyan-900 px-4 py-2 rounded-xl flex items-center space-x-2">
+                      <span className="text-xl">{p.avatar}</span>
+                      <span className="font-bold text-sm text-amber-300">{p.name}</span>
+                      <span className="text-xs text-cyan-400">({p.mode === 'individual' ? `Cadeira #${(p.chairNumber ?? 0) + 1}` : `Equipe ${p.teamId}`})</span>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
