@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit3, Armchair, ArrowLeft, RefreshCw, LogOut, CheckCircle2, Play, Lock, Unlock, Gamepad2 } from 'lucide-react';
+import { Plus, Trash2, Edit3, Armchair, ArrowLeft, RefreshCw, LogOut, CheckCircle2, Play, Lock, Unlock, Gamepad2, Trophy } from 'lucide-react';
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '../firebase';
 
@@ -337,6 +337,60 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                       )}
                     </div>
                   ))}
+                </div>
+
+                {/* Placar e Ranking da Sala */}
+                <div className="mt-8 pt-6 border-t border-cyan-900/60 space-y-4">
+                  <div className="flex items-center space-x-2">
+                    <Trophy className="w-5 h-5 text-amber-400" />
+                    <h4 className="text-lg font-black text-white">Placar e Ranking de Alunos</h4>
+                  </div>
+
+                  {ocupadas === 0 ? (
+                    <div className="text-xs text-cyan-300/60 bg-slate-950 p-4 rounded-2xl border border-cyan-900/40 text-center">
+                      Nenhum aluno sentado no momento para exibir o ranking.
+                    </div>
+                  ) : (
+                    <div className="bg-slate-950 border border-cyan-500/30 rounded-2xl p-4 overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-cyan-900/60 text-[11px] font-black uppercase text-cyan-300">
+                            <th className="py-2 px-3">Posição</th>
+                            <th className="py-2 px-3">Aluno</th>
+                            <th className="py-2 px-3">Cadeira</th>
+                            <th className="py-2 px-3 text-right">Pontuação</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-cyan-900/40 text-xs font-semibold">
+                          {[...cadeiras]
+                            .filter((c: any) => c.ocupada && c.nomeAluno)
+                            .sort((a: any, b: any) => (b.score || 0) - (a.score || 0))
+                            .map((c: any, index: number) => {
+                              const medalColors = index === 0 ? 'bg-amber-400 text-slate-950 font-black' : index === 1 ? 'bg-slate-300 text-slate-950 font-black' : index === 2 ? 'bg-amber-700 text-white font-black' : 'bg-slate-900 text-cyan-300';
+                              return (
+                                <tr key={c.id} className="hover:bg-[#07262c]/50 transition">
+                                  <td className="py-3 px-3">
+                                    <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs ${medalColors}`}>
+                                      {index + 1}º
+                                    </span>
+                                  </td>
+                                  <td className="py-3 px-3 flex items-center space-x-2">
+                                    <span className="text-base">{c.avatar || '🦁'}</span>
+                                    <span className="text-white font-bold">{c.nomeAluno}</span>
+                                  </td>
+                                  <td className="py-3 px-3 text-cyan-300 font-mono">
+                                    Cadeira #{c.id}
+                                  </td>
+                                  <td className="py-3 px-3 text-right font-black text-amber-400 text-sm">
+                                    {c.score || 0} pts
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
 
               </div>

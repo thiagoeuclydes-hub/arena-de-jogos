@@ -194,7 +194,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
         const salaData = docSnap.data();
         const updatedCadeiras = salaData.cadeiras.map((c: any) => {
           if (c.id === myChairId) {
-            return { id: c.id, ocupada: false, nomeAluno: '', avatar: '' };
+            return { id: c.id, ocupada: false, nomeAluno: '', avatar: '', score: 0 };
           }
           return c;
         });
@@ -208,9 +208,32 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
       sessionStorage.removeItem('arena_my_chair');
       setMySalaId(null);
       setMyChairId(null);
+      setScore(0);
       setStep('grid');
     } catch (err) {
       console.error("Erro ao sair da cadeira:", err);
+    }
+  };
+
+  const addScorePoints = async (points: number) => {
+    const newScore = score + points;
+    setScore(newScore);
+    if (!mySalaId || !myChairId || !db) return;
+    try {
+      const salaRef = doc(db, 'salas', mySalaId);
+      const docSnap = await getDoc(salaRef);
+      if (docSnap.exists()) {
+        const salaData = docSnap.data();
+        const updatedCadeiras = salaData.cadeiras.map((c: any) => {
+          if (c.id === myChairId) {
+            return { ...c, score: newScore };
+          }
+          return c;
+        });
+        await updateDoc(salaRef, { cadeiras: updatedCadeiras });
+      }
+    } catch (err) {
+      console.error("Erro ao atualizar placar:", err);
     }
   };
 
@@ -578,7 +601,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                           const correct = idx === QUIZ_QUESTIONS[questionIdx].correctIndex;
                           setAnsweredResult(correct);
                           if (correct) {
-                            setScore(s => s + 500);
+                            addScorePoints(500);
                             confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
                           }
                         }}
@@ -637,7 +660,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                           const correct = item.val === VF_QUESTIONS[questionIdx].isTrue;
                           setAnsweredResult(correct);
                           if (correct) {
-                            setScore(s => s + 400);
+                            addScorePoints(400);
                             confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
                           }
                         }}
@@ -693,7 +716,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                           onClick={() => {
                             setGuessedLetters([...guessedLetters, letter]);
                             if (FORCA_WORDS[forcaIdx].word.includes(letter)) {
-                              setScore(s => s + 200);
+                              addScorePoints(200);
                               confetti({ particleCount: 30, spread: 40 });
                             }
                           }}
