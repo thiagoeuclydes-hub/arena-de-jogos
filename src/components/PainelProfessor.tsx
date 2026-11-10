@@ -23,12 +23,24 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
   // Banco de Questões & Temas State
   const [showQuestionModal, setShowQuestionModal] = useState(false);
   const [activeQuestionGame, setActiveQuestionGame] = useState<'forca' | 'verdadeiro_falso' | 'quiz'>('quiz');
-  const [temasList, setTemasList] = useState<string[]>(['BRASIL', 'ALAGOAS', 'CIENCIAS', 'FILME: JACK', 'FILME VINGADORES']);
+  const defaultThemes = ['BRASIL', 'ALAGOAS', 'CIENCIAS', 'FILME: JACK', 'FILME VINGADORES'];
+  const [customTemas, setCustomTemas] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('arena_custom_temas');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [];
+  });
   const [selectedTema, setSelectedTema] = useState('BRASIL');
   const [novoTemaInput, setNovoTemaInput] = useState('');
   const [editTemaModal, setEditTemaModal] = useState(false);
   const [temaParaEditar, setTemaParaEditar] = useState('');
   const [temaEditadoNome, setTemaEditadoNome] = useState('');
+
+  const [questoesBanco, setQuestoesBanco] = useState<any[]>([]);
+
+  const bancoTemas = questoesBanco.map(q => q.tema).filter(Boolean);
+  const temasList = Array.from(new Set([...defaultThemes, ...customTemas, ...bancoTemas]));
 
   // Form question fields
   const [qText, setQText] = useState('');
@@ -38,7 +50,7 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
   const [qWord, setQWord] = useState('');
   const [qHint, setQHint] = useState('');
 
-  const [questoesBanco, setQuestoesBanco] = useState<any[]>([]);
+
 
   useEffect(() => {
     if (!isFirebaseConfigured || !db) {
@@ -447,7 +459,11 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
     if (!novoTemaInput.trim()) return;
     const t = novoTemaInput.trim().toUpperCase();
     if (!temasList.includes(t)) {
-      setTemasList([...temasList, t]);
+      const updatedCustom = [...customTemas, t];
+      setCustomTemas(updatedCustom);
+      try {
+        localStorage.setItem('arena_custom_temas', JSON.stringify(updatedCustom));
+      } catch (e) {}
       setSelectedTema(t);
     }
     setNovoTemaInput('');
@@ -457,7 +473,14 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
     e.preventDefault();
     if (!temaEditadoNome.trim()) return;
     const novo = temaEditadoNome.trim().toUpperCase();
-    setTemasList(temasList.map(t => t === temaParaEditar ? novo : t));
+    const updatedCustom = customTemas.map(t => t === temaParaEditar ? novo : t);
+    if (!updatedCustom.includes(novo) && !defaultThemes.includes(novo)) {
+      updatedCustom.push(novo);
+    }
+    setCustomTemas(updatedCustom);
+    try {
+      localStorage.setItem('arena_custom_temas', JSON.stringify(updatedCustom));
+    } catch (e) {}
     if (selectedTema === temaParaEditar) {
       setSelectedTema(novo);
     }
