@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Key, Armchair, RefreshCw, LogOut, Gamepad2 } from 'lucide-react';
-import { collection, doc, getDoc, updateDoc, onSnapshot, runTransaction } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, updateDoc, onSnapshot, runTransaction } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '../firebase';
 import confetti from 'canvas-confetti';
 
@@ -10,13 +10,22 @@ interface ArenaAlunosProps {
 
 const AVATARS = ['🦊', '🐼', '🦁', '🐯', '🐸', '🐵', '🦄', '🐲', '🤖', '👾', '🚀', '⚽'];
 
+const DEFAULT_FORCA_WORDS = [
+  { word: 'ALAGOAS', hint: 'Estado brasileiro conhecido pelas praias e lagoas.' },
+  { word: 'MACEIO', hint: 'Capital do estado de Alagoas.' },
+  { word: 'BRASIL', hint: 'País onde fica o estado de Alagoas.' },
+  { word: 'MATEMATICA', hint: 'Ciência dos números, cálculos e lógica.' },
+  { word: 'GEOGRAFIA', hint: 'Estudo do relevo, mapas e espaço terrestre.' },
+  { word: 'HISTORIA', hint: 'Ciência que estuda os fatos do passado humano.' }
+];
+
 export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
   const [salas, setSalas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSala, setSelectedSala] = useState<any>(null);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
-  const [step, setStep] = useState<'list' | 'pin' | 'profile' | 'grid' | 'arena_hub' | 'play_jogo_cores'>('list');
+  const [step, setStep] = useState<'list' | 'pin' | 'profile' | 'grid' | 'arena_hub' | 'play_jogo_cores' | 'play_jogo_forca'>('list');
 
   const [nome, setNome] = useState('');
   const [avatar, setAvatar] = useState('🦁');
@@ -39,6 +48,17 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
   // Jogo das Cores student state for round locking
   const [lastRodadaAnswered, setLastRodadaAnswered] = useState<number | null>(null);
   const [feedbackMsg, setFeedbackMsg] = useState<{ text: string; correct: boolean } | null>(null);
+
+  // Jogo da Forca state
+  const [forcaWords, setForcaWords] = useState<any[]>([]);
+  const [currentForcaIdx, setCurrentForcaIdx] = useState(0);
+  const [currentForcaWord, setCurrentForcaWord] = useState({ word: 'ALAGOAS', hint: 'Estado brasileiro conhecido pelas praias e lagoas.' });
+  const [guessedForcaLetters, setGuessedForcaLetters] = useState<string[]>([]);
+  const [forcaMistakes, setForcaMistakes] = useState(0);
+  const [hintUnlocked, setHintUnlocked] = useState(false);
+  const [forcaTimer, setForcaTimer] = useState(30);
+  const [forcaTimerActive, setForcaTimerActive] = useState(false);
+  const [forcaFeedback, setForcaFeedback] = useState<{ text: string; success: boolean } | null>(null);
 
   useEffect(() => {
     if (!isFirebaseConfigured || !db) {
@@ -112,6 +132,27 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
 
     return () => unsubscribe();
   }, []);
+
+  // Forca Timer effect
+  useEffect(() => {
+    let interval: any = null;
+    if (forcaTimerActive && forcaTimer > 0 && step === 'play_jogo_forca') {
+      interval = setInterval(() => {
+        setForcaTimer(prev => {
+          if (prev <= 1) {
+            setForcaTimerActive(false);
+            setForcaFeedback({ text: `⏰ Tempo esgotado (30s)! A palavra era: ${currentForcaWord.word}`, success: false });
+            setTimeout(() => {
+              handleNextForcaWord();
+            }, 3000);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [forcaTimerActive, forcaTimer, currentForcaWord, step]);
 
   const handleSelectSala = (sala: any) => {
     setSelectedSala(sala);
@@ -242,6 +283,96 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
       });
     } catch (err) {
       console.error("Erro ao atualizar placar em transação:", err);
+    }
+  };
+
+  const handleStartForca = async () => {
+    if (!db) return;
+    try {
+      const snap = await getDocs(collection(db, 'banco_questoes'));
+      const list: any[] = [];
+      snap.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.tipo === 'forca' && data.word) {
+          list.push({ word: String(data.word || '').toUpperCase().trim(), hint: String(data.hint || 'Sem dica cadastrada.') });
+        }
+      });
+      const wordsToUse = list.length > 0 ? list : DEFAULT_FORCA_WORDS;
+      setForcaWords(wordsToUse);
+      const randIdx = Math.floor(Math.random() * wordsToUse.length);
+      setCurrentForcaIdx(randIdx);
+      setCurrentForcaWord(wordsToUse[randIdx]);
+      setGuessedForcaLetters([]);
+      setForcaMistakes(0);
+      setHintUnlocked(false);
+      setForcaTimer(30);
+      setForcaTimerActive(false);
+      setForcaFeedback(null);
+      setStep('play_jogo_forca');
+    } catch (err) {
+      console.error("Erro ao carregar forca:", err);
+      setForcaWords(DEFAULT_FORCA_WORDS);
+      setCurrentForcaWord(DEFAULT_FORCA_WORDS[0]);
+      setGuessedForcaLetters([]);
+      setForcaMistakes(0);
+      setHintUnlocked(false);
+      setForcaTimer(30);
+      setForcaTimerActive(false);
+      setForcaFeedback(null);
+      setStep('play_jogo_forca');
+    }
+  };
+
+  const handleNextForcaWord = () => {
+    if (forcaWords.length === 0) return;
+    const nextIdx = (currentForcaIdx + 1) % forcaWords.length;
+    setCurrentForcaIdx(nextIdx);
+    setCurrentForcaWord(forcaWords[nextIdx]);
+    setGuessedForcaLetters([]);
+    setForcaMistakes(0);
+    setHintUnlocked(false);
+    setForcaTimer(30);
+    setForcaTimerActive(false);
+    setForcaFeedback(null);
+  };
+
+  const handleGuessForcaLetter = (letter: string) => {
+    if (guessedForcaLetters.includes(letter) || forcaFeedback) return;
+
+    const newGuessed = [...guessedForcaLetters, letter];
+    setGuessedForcaLetters(newGuessed);
+
+    const isCorrect = currentForcaWord.word.includes(letter);
+    const newMistakes = forcaMistakes + (isCorrect ? 0 : 1);
+    if (!isCorrect) {
+      setForcaMistakes(newMistakes);
+    }
+
+    // A dica abre após 3 letras. Quando colocar as 3 letras abre o tempo pra finalizar.
+    if (newGuessed.length === 3 && !hintUnlocked) {
+      setHintUnlocked(true);
+      setForcaTimer(30);
+      setForcaTimerActive(true);
+    }
+
+    // Check if word is fully solved
+    const wordLetters = Array.from(new Set(currentForcaWord.word.replace(/\s+/g, '')));
+    const solved = wordLetters.every(l => newGuessed.includes(l));
+
+    if (solved) {
+      setForcaTimerActive(false);
+      addScorePoints(15);
+      setForcaFeedback({ text: `🎉 Acertou a palavra "${currentForcaWord.word}"! +15 pts`, success: true });
+      confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+      setTimeout(() => {
+        handleNextForcaWord();
+      }, 2500);
+    } else if (newMistakes >= 6) {
+      setForcaTimerActive(false);
+      setForcaFeedback({ text: `❌ Game Over! A palavra era: ${currentForcaWord.word}`, success: false });
+      setTimeout(() => {
+        handleNextForcaWord();
+      }, 3000);
     }
   };
 
@@ -488,7 +619,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
             </div>
           )}
 
-          {/* STEP 5: ARENA HUB (JOGO DAS CORES) */}
+          {/* STEP 5: ARENA HUB (JOGO DAS CORES & JOGO DA FORCA) */}
           {step === 'arena_hub' && selectedSala && (
             <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 md:p-8 shadow-xl space-y-8">
               
@@ -523,46 +654,81 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
               <div className="space-y-4">
                 <div className="flex items-center space-x-2 bg-[#052c1e] p-4 rounded-2xl border border-emerald-800 text-emerald-300 font-bold text-sm">
                   <Gamepad2 className="w-5 h-5 text-amber-400" />
-                  <span>Jogo Ativo:</span>
+                  <span>Jogos Disponíveis na Arena:</span>
                 </div>
 
-                {(() => {
-                  const isUnlocked = selectedSala.jogoCoresLiberado === true;
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Jogo das Cores Card */}
+                  {(() => {
+                    const isUnlocked = selectedSala.jogoCoresLiberado === true;
 
-                  return (
-                    <div
-                      onClick={() => {
-                        if (!isUnlocked) {
-                          alert('O Jogo das Cores está trancado pelo professor no momento.');
-                          return;
-                        }
-                        setStep('play_jogo_cores');
-                        setFeedbackMsg(null);
-                      }}
-                      className={`border p-8 rounded-3xl transition flex flex-col justify-between ${isUnlocked ? 'bg-gradient-to-br from-purple-600 to-pink-600 border-white/30 cursor-pointer shadow-2xl transform hover:scale-102' : 'bg-slate-950/90 border-red-900/60 opacity-80 cursor-not-allowed'}`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h4 className="text-2xl font-black text-white mb-2">🎨 JOGO DAS CORES</h4>
-                          <p className="text-sm text-white/90">Ouça o comando do professor, evite a cor escolhida e acumule pontos!</p>
+                    return (
+                      <div
+                        onClick={() => {
+                          if (!isUnlocked) {
+                            alert('O Jogo das Cores está trancado pelo professor no momento.');
+                            return;
+                          }
+                          setStep('play_jogo_cores');
+                          setFeedbackMsg(null);
+                        }}
+                        className={`border p-6 rounded-3xl transition flex flex-col justify-between ${isUnlocked ? 'bg-gradient-to-br from-purple-600 to-pink-600 border-white/30 cursor-pointer shadow-xl transform hover:scale-102' : 'bg-slate-950/90 border-red-900/60 opacity-80 cursor-not-allowed'}`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h4 className="text-xl font-black text-white mb-1">🎨 JOGO DAS CORES</h4>
+                            <p className="text-xs text-white/90">Ouça o comando do professor, evite a cor escolhida e ganhe pontos!</p>
+                          </div>
+                          <span className={`px-3 py-1 rounded-full text-xs font-black uppercase ${isUnlocked ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}>
+                            {isUnlocked ? 'liberado 🔓' : 'trancado 🔒'}
+                          </span>
                         </div>
-                        <span className={`px-4 py-1.5 rounded-full text-xs font-black uppercase ${isUnlocked ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}>
-                          {isUnlocked ? 'liberado 🔓' : 'trancado 🔒'}
-                        </span>
+                        <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs font-black text-white">
+                          <span>{isUnlocked ? 'Jogar Agora ➔' : 'Trancado pelo Professor'}</span>
+                          <span className="text-amber-200">Pontuação: {score} pts</span>
+                        </div>
                       </div>
-                      <div className="mt-6 pt-4 border-t border-white/20 flex items-center justify-between text-sm font-black text-white">
-                        <span>{isUnlocked ? 'Jogar Agora ➔' : 'Aguardando Liberação do Professor'}</span>
-                        <span className="text-amber-300">Sua Pontuação: {score} pts</span>
+                    );
+                  })()}
+
+                  {/* Jogo da Forca Card */}
+                  {(() => {
+                    const isForcaUnlocked = selectedSala.jogoForcaLiberado === true;
+
+                    return (
+                      <div
+                        onClick={() => {
+                          if (!isForcaUnlocked) {
+                            alert('O Jogo da Forca está trancado pelo professor no momento.');
+                            return;
+                          }
+                          handleStartForca();
+                        }}
+                        className={`border p-6 rounded-3xl transition flex flex-col justify-between ${isForcaUnlocked ? 'bg-gradient-to-br from-amber-600 to-yellow-600 border-white/30 cursor-pointer shadow-xl transform hover:scale-102' : 'bg-slate-950/90 border-red-900/60 opacity-80 cursor-not-allowed'}`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h4 className="text-xl font-black text-white mb-1">🔤 JOGO DA FORCA</h4>
+                            <p className="text-xs text-white/90">Descubra as palavras secretas! +15 pts por acerto. Dica abre após 3 letras!</p>
+                          </div>
+                          <span className={`px-3 py-1 rounded-full text-xs font-black uppercase ${isForcaUnlocked ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}>
+                            {isForcaUnlocked ? 'liberado 🔓' : 'trancado 🔒'}
+                          </span>
+                        </div>
+                        <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs font-black text-white">
+                          <span>{isForcaUnlocked ? 'Jogar Forca Agora ➔' : 'Trancado pelo Professor'}</span>
+                          <span className="text-amber-200">Pontuação: {score} pts</span>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })()}
+                    );
+                  })()}
+                </div>
               </div>
 
             </div>
           )}
 
-          {/* STEP 6: PLAY JOGO DAS CORES (TODAS AS CORES COM O NOME DA COR ESCOLHIDA PELO PROFESSOR) */}
+          {/* STEP 6: PLAY JOGO DAS CORES */}
           {step === 'play_jogo_cores' && selectedSala && (
             <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 md:p-8 shadow-xl space-y-6 max-w-2xl mx-auto w-full text-center">
               
@@ -652,6 +818,99 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                     )}
                   </div>
                 )}
+              </div>
+
+            </div>
+          )}
+
+          {/* STEP 7: PLAY JOGO DA FORCA */}
+          {step === 'play_jogo_forca' && selectedSala && (
+            <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 md:p-8 shadow-xl space-y-6 max-w-2xl mx-auto w-full text-center">
+              
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => setStep('arena_hub')}
+                  className="px-4 py-2 rounded-xl bg-slate-950 border border-cyan-500/30 text-cyan-300 font-bold text-xs"
+                >
+                  ← Voltar
+                </button>
+                <div className="bg-amber-400/20 border border-amber-400/40 px-4 py-1.5 rounded-xl">
+                  <span className="text-xs text-cyan-200 font-bold mr-2">Pontuação:</span>
+                  <span className="text-lg font-black text-amber-400">{score} pts</span>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="inline-block bg-amber-600/30 border border-amber-400 text-amber-300 text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-widest">
+                  🔤 JOGO DA FORCA &bull; +15 PTS POR PALAVRA
+                </div>
+
+                {/* Timer & Mistakes banner */}
+                <div className="flex items-center justify-between bg-slate-950 p-4 rounded-2xl border border-cyan-900 text-xs font-bold">
+                  <span className="text-red-400">Erros: {forcaMistakes} / 6</span>
+                  {hintUnlocked && (
+                    <span className="text-amber-400 animate-pulse font-mono text-sm">
+                      ⏱️ Tempo: {forcaTimer}s
+                    </span>
+                  )}
+                  <span className="text-cyan-300">Letras Tentadas: {guessedForcaLetters.length}</span>
+                </div>
+
+                {/* Word display */}
+                <div className="bg-slate-950 p-8 rounded-3xl border-2 border-amber-500/40 shadow-xl space-y-6">
+                  <div className="flex flex-wrap justify-center gap-3">
+                    {currentForcaWord.word.split('').map((char, idx) => {
+                      const revealed = guessedForcaLetters.includes(char) || forcaFeedback !== null;
+                      return (
+                        <div
+                          key={idx}
+                          className="w-10 h-12 md:w-12 md:h-14 bg-[#07262c] border-2 border-amber-400 rounded-xl flex items-center justify-center text-xl md:text-2xl font-black text-amber-300 shadow-inner"
+                        >
+                          {revealed ? char : '_'}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Hint Section */}
+                  <div className="pt-4 border-t border-cyan-900/60">
+                    {hintUnlocked ? (
+                      <div className="bg-amber-500/10 border border-amber-500/30 p-4 rounded-2xl text-xs text-amber-200 font-bold space-y-1">
+                        <span className="uppercase tracking-wider text-amber-400 block font-black">💡 Dica da Palavra:</span>
+                        <p>{currentForcaWord.hint}</p>
+                      </div>
+                    ) : (
+                      <div className="bg-slate-900/60 p-3 rounded-2xl text-xs text-cyan-400/70 font-bold">
+                        🔒 A Dica abrirá após você tentar/colocar 3 letras (Tentadas: {guessedForcaLetters.length}/3)
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Feedback */}
+                {forcaFeedback && (
+                  <div className={`p-4 rounded-2xl font-black text-sm animate-bounce ${forcaFeedback.success ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-red-500/20 text-red-300 border border-red-500/40'}`}>
+                    {forcaFeedback.text}
+                  </div>
+                )}
+
+                {/* Alphabet Virtual Keyboard */}
+                <div className="grid grid-cols-7 sm:grid-cols-9 gap-2">
+                  {['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z'].map(letter => {
+                    const tried = guessedForcaLetters.includes(letter);
+                    return (
+                      <button
+                        key={letter}
+                        disabled={tried || forcaFeedback !== null}
+                        onClick={() => handleGuessForcaLetter(letter)}
+                        className={`py-3 rounded-xl font-black text-xs md:text-sm transition shadow ${tried ? 'bg-slate-900 border border-slate-800 text-slate-600 cursor-not-allowed' : 'bg-amber-400 hover:bg-amber-300 text-slate-950 border border-amber-200 transform hover:scale-105'}`}
+                      >
+                        {letter}
+                      </button>
+                    );
+                  })}
+                </div>
+
               </div>
 
             </div>
