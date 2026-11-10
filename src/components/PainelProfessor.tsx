@@ -296,6 +296,57 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
     }
   };
 
+  const handleLiberarPalavraForca = async (salaId: string, word: string, hint: string) => {
+    if (!db || !word) return;
+    try {
+      const sala = salas.find(s => s.id === salaId);
+      const currentRodada = sala?.forcaRodadaId || 0;
+      await updateDoc(doc(db as any, 'salas', salaId), {
+        palavraAtivaForca: word.toUpperCase().trim(),
+        dicaAtivaForca: hint.trim(),
+        forcaRodadaId: currentRodada + 1,
+        jogoForcaLiberado: true
+      });
+      alert(`Palavra "${word}" liberada com sucesso para os alunos!`);
+    } catch (err) {
+      console.error("Erro ao liberar palavra da forca:", err);
+      alert('Erro ao liberar palavra.');
+    }
+  };
+
+  const handleToggleJogoQuiz = async (salaId: string, currentState: boolean) => {
+    if (!db) return;
+    try {
+      await updateDoc(doc(db as any, 'salas', salaId), {
+        jogoQuizLiberado: !currentState
+      });
+    } catch (err) {
+      console.error("Erro ao alternar jogo do quiz:", err);
+    }
+  };
+
+  const handleLiberarPerguntaQuiz = async (salaId: string, qItem: any) => {
+    if (!db || !qItem) return;
+    try {
+      const sala = salas.find(s => s.id === salaId);
+      const currentRodada = sala?.quizRodadaId || 0;
+      await updateDoc(doc(db as any, 'salas', salaId), {
+        perguntaAtivaQuiz: {
+          question: qItem.question,
+          options: qItem.options,
+          correctIndex: qItem.correctIndex ?? 0,
+          tema: qItem.tema
+        },
+        quizRodadaId: currentRodada + 1,
+        jogoQuizLiberado: true
+      });
+      alert(`Pergunta de Quiz liberada com sucesso para os alunos!`);
+    } catch (err) {
+      console.error("Erro ao liberar pergunta do quiz:", err);
+      alert('Erro ao liberar pergunta.');
+    }
+  };
+
   // Banco de Questões handlers
   const handleOpenQuestionModal = (gameType: 'forca' | 'verdadeiro_falso' | 'quiz') => {
     setActiveQuestionGame(gameType);
@@ -692,12 +743,60 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                   </div>
                 </div>
 
+                {/* JOGO DO QUIZ - PAINEL DO PROFESSOR */}
+                <div className="w-full p-5 bg-slate-950/90 border-2 border-blue-500/50 rounded-3xl space-y-4 shadow-2xl">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm font-black text-blue-300 uppercase tracking-wider">
+                        ❓ JOGO DO QUIZ &bull; Escolher e Liberar Pergunta (Uma por Uma)
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleJogoQuiz(sala.id, sala.jogoQuizLiberado)}
+                      className={`px-4 py-1.5 rounded-xl font-black text-xs uppercase transition shadow ${sala.jogoQuizLiberado ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}
+                    >
+                      {sala.jogoQuizLiberado ? 'Liberado para Alunos 🔓' : 'Trancado 🔒'}
+                    </button>
+                  </div>
+
+                  <p className="text-xs text-blue-200/80">
+                    Pergunta ativa atual: <strong className="text-amber-400 font-mono text-sm">{sala.perguntaAtivaQuiz?.question || 'Nenhuma pergunta liberada ainda'}</strong>
+                  </p>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-blue-300 mb-1">Selecionar Pergunta de Quiz para Liberar:</label>
+                      <select
+                        onChange={(e) => {
+                          const qId = e.target.value;
+                          if (qId) {
+                            const foundQ = questoesBanco.find(q => q.id === qId);
+                            if (foundQ) {
+                              handleLiberarPerguntaQuiz(sala.id, foundQ);
+                            }
+                          }
+                          e.target.value = '';
+                        }}
+                        className="w-full bg-slate-900 border border-blue-500/40 rounded-xl px-3 py-2 text-xs text-white font-bold uppercase focus:outline-none"
+                      >
+                        <option value="">-- Escolher Pergunta de Quiz e Liberar --</option>
+                        {questoesBanco.filter(q => q.tipo === 'quiz').map(q => (
+                          <option key={q.id} value={q.id}>
+                            [{q.tema}] {q.question}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
                 {/* JOGO DA FORCA - PAINEL DO PROFESSOR */}
                 <div className="w-full p-5 bg-slate-950/90 border-2 border-amber-500/50 rounded-3xl space-y-4 shadow-2xl">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
                       <span className="text-sm font-black text-amber-300 uppercase tracking-wider">
-                        🔤 JOGO DA FORCA &bull; Controle de Acesso
+                        🔤 JOGO DA FORCA &bull; Escolher e Liberar Palavra (Uma por Uma)
                       </span>
                     </div>
                     <button
@@ -708,9 +807,35 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                       {sala.jogoForcaLiberado ? 'Liberado para Alunos 🔓' : 'Trancado 🔒'}
                     </button>
                   </div>
+
                   <p className="text-xs text-amber-200/80">
-                    Abra ou feche o acesso ao Jogo da Forca para os alunos nesta sala.
+                    Palavra ativa atual: <strong className="text-amber-400 font-mono text-sm">{sala.palavraAtivaForca || 'Nenhuma palavra liberada ainda'}</strong>
+                    {sala.dicaAtivaForca && <span> (Dica: {sala.dicaAtivaForca})</span>}
                   </p>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-amber-300 mb-1">Selecionar Palavra do Banco de Questões para Liberar:</label>
+                      <select
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val) {
+                            const [w, h] = val.split('|||');
+                            handleLiberarPalavraForca(sala.id, w, h);
+                          }
+                          e.target.value = '';
+                        }}
+                        className="w-full bg-slate-900 border border-amber-500/40 rounded-xl px-3 py-2 text-xs text-white font-bold uppercase focus:outline-none"
+                      >
+                        <option value="">-- Escolher do Banco de Questões e Liberar --</option>
+                        {questoesBanco.filter(q => q.tipo === 'forca').map(q => (
+                          <option key={q.id} value={`${q.word}|||${q.hint || ''}`}>
+                            [{q.tema}] {q.word} - Dica: {q.hint}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Chairs Grid */}
