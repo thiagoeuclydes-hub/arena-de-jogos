@@ -323,8 +323,12 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
   };
 
   const addScorePoints = async (points: number) => {
-    const newScore = score + points;
-    setScore(newScore);
+    let updatedNewScore = 0;
+    setScore(prev => {
+      updatedNewScore = prev + points;
+      return updatedNewScore;
+    });
+
     if (!mySalaId || !myChairId || !db) return;
     try {
       await runTransaction(db as any, async (transaction: any) => {
@@ -334,12 +338,16 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
         const salaData = salaDoc.data();
         const updatedCadeiras = (salaData.cadeiras || []).map((c: any) => {
           if (c.id === myChairId) {
-            return { ...c, score: newScore };
+            const currentScore = typeof c.score === 'number' ? c.score : 0;
+            const finalScore = Math.max(0, currentScore + points);
+            updatedNewScore = finalScore;
+            return { ...c, score: finalScore };
           }
           return c;
         });
         transaction.update(salaRef, { cadeiras: updatedCadeiras });
       });
+      setScore(updatedNewScore);
     } catch (err) {
       console.error("Erro ao atualizar placar em transação:", err);
     }
