@@ -16,7 +16,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
   const [selectedSala, setSelectedSala] = useState<any>(null);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
-  const [step, setStep] = useState<'list' | 'pin' | 'profile' | 'grid' | 'arena_hub' | 'play_jogo_cores' | 'play_jogo_forca' | 'play_jogo_quiz'>('list');
+  const [step, setStep] = useState<'list' | 'pin' | 'profile' | 'grid' | 'arena_hub' | 'play_jogo_cores' | 'play_jogo_forca' | 'play_jogo_quiz' | 'play_jogo_quadrado'>('list');
 
   const [nome, setNome] = useState('');
   const [avatar, setAvatar] = useState('🦁');
@@ -53,6 +53,10 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
   const [lastQuizRodadaAnswered, setLastQuizRodadaAnswered] = useState<number | null>(null);
   const [quizFeedback, setQuizFeedback] = useState<{ text: string; correct: boolean } | null>(null);
 
+  // Jogo do Quadrado state
+  const [myQuadradoChoice, setMyQuadradoChoice] = useState<number | null>(null);
+  const [lastQuadradoRodadaSeen, setLastQuadradoRodadaSeen] = useState<number | null>(null);
+
   useEffect(() => {
     if (selectedSala?.palavraAtivaForca) {
       setCurrentForcaWord({
@@ -74,6 +78,15 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
       setQuizFeedback(null);
     }
   }, [selectedSala?.quizRodadaId]);
+
+  useEffect(() => {
+    if (selectedSala?.quadradoRodadaId) {
+      if (lastQuadradoRodadaSeen !== selectedSala.quadradoRodadaId) {
+        setLastQuadradoRodadaSeen(selectedSala.quadradoRodadaId);
+        setMyQuadradoChoice(null);
+      }
+    }
+  }, [selectedSala?.quadradoRodadaId]);
 
   useEffect(() => {
     if (!isFirebaseConfigured || !db) {
@@ -186,12 +199,43 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
     }
   };
 
-  const handleStartGrid = (e: React.FormEvent) => {
+  const handleStartGrid = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nome.trim()) {
+    const cleanName = nome.trim();
+    if (!cleanName) {
       alert('Digite seu nome.');
       return;
     }
+
+    if (!selectedSala || !db) {
+      setStep('grid');
+      return;
+    }
+
+    try {
+      const salaRef = doc(db, 'salas', selectedSala.id);
+      const docSnap = await getDoc(salaRef);
+      if (docSnap.exists()) {
+        const salaData = docSnap.data();
+        const existingChair = (salaData.cadeiras || []).find(
+          (c: any) => c.ocupada && c.nomeAluno && c.nomeAluno.toUpperCase().trim() === cleanName.toUpperCase()
+        );
+
+        if (existingChair) {
+          sessionStorage.setItem('arena_my_sala', selectedSala.id);
+          sessionStorage.setItem('arena_my_chair', String(existingChair.id));
+          setMySalaId(selectedSala.id);
+          setMyChairId(existingChair.id);
+          setScore(existingChair.score || 0);
+          setAvatar(existingChair.avatar || avatar);
+          setStep('arena_hub');
+          return;
+        }
+      }
+    } catch (err) {
+      console.error("Erro ao verificar reconexão:", err);
+    }
+
     setStep('grid');
   };
 
@@ -384,9 +428,24 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
     }
   };
 
+  const handleChooseQuadrado = async (sqIdx: number) => {
+    if (!mySalaId || !myChairId || !db) return;
+    try {
+      await updateDoc(doc(db as any, 'salas', mySalaId), {
+        [`escolhasAlunosQuadrado.${myChairId}`]: sqIdx
+      });
+      setMyQuadradoChoice(sqIdx);
+    } catch (err) {
+      console.error("Erro ao escolher quadrado:", err);
+    }
+  };
+
   const currentRodadaId = selectedSala?.rodadaId || 0;
   const hasAnsweredCurrentRodada = lastRodadaAnswered === currentRodadaId;
   const corEscolhidaProfessor = selectedSala?.corRodada ? selectedSala.corRodada.toUpperCase() : '...';
+
+  const myChairData = (selectedSala?.cadeiras || []).find((c: any) => c.id === myChairId);
+  const isEliminatedInQuadrado = myChairData?.eliminadoQuadrado === true;
 
   if (!isFirebaseConfigured) {
     return (
@@ -524,9 +583,9 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
           {/* STEP 3: NOME & AVATAR PROFILE */}
           {step === 'profile' && selectedSala && (
             <div className="max-w-md mx-auto w-full bg-[#07262c] border border-cyan-500/30 rounded-3xl p-8 shadow-2xl space-y-6">
-              <div className="text-center">
+              <div className="text-center space-y-2">
                 <h3 className="text-2xl font-black text-white">Seu Perfil de Aluno</h3>
-                <p className="text-sm text-cyan-300/70 mt-1">Digite seu nome e escolha seu avatar favorito</p>
+                <p className="text-sm text-cyan-300/70">Digite seu nome exato para entrar ou retomar sua cadeira e pontuação caso tenha saído</p>
               </div>
 
               <form onSubmit={handleStartGrid} className="space-y-5">
@@ -627,7 +686,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
             </div>
           )}
 
-          {/* STEP 5: ARENA HUB (JOGO DAS CORES, FORCA & QUIZ) */}
+          {/* STEP 5: ARENA HUB (JOGO DAS CORES, FORCA, QUIZ & QUADRADO) */}
           {step === 'arena_hub' && selectedSala && (
             <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 md:p-8 shadow-xl space-y-8">
               
@@ -665,7 +724,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                   <span>Jogos Disponíveis na Arena:</span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   {/* Jogo das Cores Card */}
                   {(() => {
                     const isUnlocked = selectedSala.jogoCoresLiberado === true;
@@ -680,20 +739,20 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                           setStep('play_jogo_cores');
                           setFeedbackMsg(null);
                         }}
-                        className={`border p-6 rounded-3xl transition flex flex-col justify-between ${isUnlocked ? 'bg-gradient-to-br from-purple-600 to-pink-600 border-white/30 cursor-pointer shadow-xl transform hover:scale-102' : 'bg-slate-950/90 border-red-900/60 opacity-80 cursor-not-allowed'}`}
+                        className={`border p-5 rounded-3xl transition flex flex-col justify-between ${isUnlocked ? 'bg-gradient-to-br from-purple-600 to-pink-600 border-white/30 cursor-pointer shadow-xl transform hover:scale-102' : 'bg-slate-950/90 border-red-900/60 opacity-80 cursor-not-allowed'}`}
                       >
                         <div className="flex items-start justify-between">
                           <div>
-                            <h4 className="text-xl font-black text-white mb-1">🎨 JOGO DAS CORES</h4>
-                            <p className="text-xs text-white/90">Evite a cor do professor e ganhe pontos!</p>
+                            <h4 className="text-lg font-black text-white mb-1">🎨 CORES</h4>
+                            <p className="text-[11px] text-white/90">Evite a cor do professor!</p>
                           </div>
-                          <span className={`px-3 py-1 rounded-full text-xs font-black uppercase ${isUnlocked ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}>
-                            {isUnlocked ? 'liberado 🔓' : 'trancado 🔒'}
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${isUnlocked ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}>
+                            {isUnlocked ? '🔓' : '🔒'}
                           </span>
                         </div>
                         <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs font-black text-white">
-                          <span>{isUnlocked ? 'Jogar Agora ➔' : 'Trancado'}</span>
-                          <span className="text-amber-200">Placar: {score} pts</span>
+                          <span>{isUnlocked ? 'Jogar ➔' : 'Trancado'}</span>
+                          <span className="text-amber-200">{score} pts</span>
                         </div>
                       </div>
                     );
@@ -712,20 +771,20 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                           }
                           handleStartForca();
                         }}
-                        className={`border p-6 rounded-3xl transition flex flex-col justify-between ${isForcaUnlocked ? 'bg-gradient-to-br from-amber-600 to-yellow-600 border-white/30 cursor-pointer shadow-xl transform hover:scale-102' : 'bg-slate-950/90 border-red-900/60 opacity-80 cursor-not-allowed'}`}
+                        className={`border p-5 rounded-3xl transition flex flex-col justify-between ${isForcaUnlocked ? 'bg-gradient-to-br from-amber-600 to-yellow-600 border-white/30 cursor-pointer shadow-xl transform hover:scale-102' : 'bg-slate-950/90 border-red-900/60 opacity-80 cursor-not-allowed'}`}
                       >
                         <div className="flex items-start justify-between">
                           <div>
-                            <h4 className="text-xl font-black text-white mb-1">🔤 JOGO DA FORCA</h4>
-                            <p className="text-xs text-white/90">Descubra as palavras secretas! +15 pts por acerto.</p>
+                            <h4 className="text-lg font-black text-white mb-1">🔤 FORCA</h4>
+                            <p className="text-[11px] text-white/90">Descubra palavras! +15 pts.</p>
                           </div>
-                          <span className={`px-3 py-1 rounded-full text-xs font-black uppercase ${isForcaUnlocked ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}>
-                            {isForcaUnlocked ? 'liberado 🔓' : 'trancado 🔒'}
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${isForcaUnlocked ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}>
+                            {isForcaUnlocked ? '🔓' : '🔒'}
                           </span>
                         </div>
                         <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs font-black text-white">
-                          <span>{isForcaUnlocked ? 'Jogar Forca ➔' : 'Trancado'}</span>
-                          <span className="text-amber-200">Placar: {score} pts</span>
+                          <span>{isForcaUnlocked ? 'Jogar ➔' : 'Trancado'}</span>
+                          <span className="text-amber-200">{score} pts</span>
                         </div>
                       </div>
                     );
@@ -745,20 +804,52 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                           setStep('play_jogo_quiz');
                           setQuizFeedback(null);
                         }}
-                        className={`border p-6 rounded-3xl transition flex flex-col justify-between ${isQuizUnlocked ? 'bg-gradient-to-br from-blue-600 to-indigo-600 border-white/30 cursor-pointer shadow-xl transform hover:scale-102' : 'bg-slate-950/90 border-red-900/60 opacity-80 cursor-not-allowed'}`}
+                        className={`border p-5 rounded-3xl transition flex flex-col justify-between ${isQuizUnlocked ? 'bg-gradient-to-br from-blue-600 to-indigo-600 border-white/30 cursor-pointer shadow-xl transform hover:scale-102' : 'bg-slate-950/90 border-red-900/60 opacity-80 cursor-not-allowed'}`}
                       >
                         <div className="flex items-start justify-between">
                           <div>
-                            <h4 className="text-xl font-black text-white mb-1">❓ QUIZ DO DIA</h4>
-                            <p className="text-xs text-white/90">Responda perguntas! +10 pts acerto, -3 pts erro.</p>
+                            <h4 className="text-lg font-black text-white mb-1">❓ QUIZ</h4>
+                            <p className="text-[11px] text-white/90">+10 pts acerto, -3 pts erro.</p>
                           </div>
-                          <span className={`px-3 py-1 rounded-full text-xs font-black uppercase ${isQuizUnlocked ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}>
-                            {isQuizUnlocked ? 'liberado 🔓' : 'trancado 🔒'}
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${isQuizUnlocked ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}>
+                            {isQuizUnlocked ? '🔓' : '🔒'}
                           </span>
                         </div>
                         <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs font-black text-white">
-                          <span>{isQuizUnlocked ? 'Jogar Quiz ➔' : 'Trancado'}</span>
-                          <span className="text-amber-200">Placar: {score} pts</span>
+                          <span>{isQuizUnlocked ? 'Jogar ➔' : 'Trancado'}</span>
+                          <span className="text-amber-200">{score} pts</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Jogo do Quadrado Card */}
+                  {(() => {
+                    const isQuadradoUnlocked = selectedSala.jogoQuadradoLiberado === true;
+
+                    return (
+                      <div
+                        onClick={() => {
+                          if (!isQuadradoUnlocked) {
+                            alert('O Jogo do Quadrado está trancado pelo professor no momento.');
+                            return;
+                          }
+                          setStep('play_jogo_quadrado');
+                        }}
+                        className={`border p-5 rounded-3xl transition flex flex-col justify-between ${isQuadradoUnlocked ? 'bg-gradient-to-br from-emerald-600 to-teal-600 border-white/30 cursor-pointer shadow-xl transform hover:scale-102' : 'bg-slate-950/90 border-red-900/60 opacity-80 cursor-not-allowed'}`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h4 className="text-lg font-black text-white mb-1">🟩 QUADRADO</h4>
+                            <p className="text-[11px] text-white/90">Evite o quadrado do prof! +20 pts.</p>
+                          </div>
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${isQuadradoUnlocked ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}>
+                            {isQuadradoUnlocked ? '🔓' : '🔒'}
+                          </span>
+                        </div>
+                        <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs font-black text-white">
+                          <span>{isQuadradoUnlocked ? 'Jogar ➔' : 'Trancado'}</span>
+                          <span className="text-amber-200">{score} pts</span>
                         </div>
                       </div>
                     );
@@ -1034,6 +1125,76 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                         {quizFeedback.text}
                       </div>
                     )}
+                  </div>
+                )}
+              </div>
+
+            </div>
+          )}
+
+          {/* STEP 9: PLAY JOGO DO QUADRADO */}
+          {step === 'play_jogo_quadrado' && selectedSala && (
+            <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 md:p-8 shadow-xl space-y-6 max-w-2xl mx-auto w-full text-center">
+              
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => setStep('arena_hub')}
+                  className="px-4 py-2 rounded-xl bg-slate-950 border border-cyan-500/30 text-cyan-300 font-bold text-xs"
+                >
+                  ← Voltar
+                </button>
+                <div className="bg-amber-400/20 border border-amber-400/40 px-4 py-1.5 rounded-xl">
+                  <span className="text-xs text-cyan-200 font-bold mr-2">Pontuação:</span>
+                  <span className="text-lg font-black text-amber-400">{score} pts</span>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="inline-block bg-emerald-600/30 border border-emerald-400 text-emerald-300 text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-widest">
+                  🟩 JOGO DO QUADRADO &bull; EVITE O QUADRADO DO PROFESSOR (+20 PTS)
+                </div>
+
+                {isEliminatedInQuadrado ? (
+                  <div className="p-8 bg-red-950/90 border-2 border-red-500 rounded-3xl space-y-4 shadow-2xl">
+                    <span className="text-3xl block">❌</span>
+                    <h3 className="text-xl font-black text-red-300 uppercase">Você foi eliminado do Jogo do Quadrado!</h3>
+                    <p className="text-xs text-red-200/80">Você escolheu o quadrado secreto do professor ou sua pontuação zerou.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="bg-slate-950 p-6 rounded-3xl border-2 border-emerald-500/40 shadow-xl space-y-3">
+                      <h4 className="text-lg font-black text-white">Escolha seu Quadrado Secreto</h4>
+                      <p className="text-xs text-emerald-200/80">
+                        Se escolher o quadrado do professor, você é eliminado. Se escolher igual a outro aluno, perde -5 pts. Se escolher sozinho e seguro, ganha +20 pts!
+                      </p>
+                      {myQuadradoChoice !== null && (
+                        <div className="p-3 bg-amber-500/20 border border-amber-500/40 rounded-xl text-amber-300 font-bold text-xs">
+                          🔒 Você escolheu o <strong>Quadrado #{myQuadradoChoice + 1}</strong>. Aguarde o professor revelar o resultado!
+                        </div>
+                      )}
+                    </div>
+
+                    {(() => {
+                      const activeCount = (selectedSala.cadeiras || []).filter((c: any) => c.ocupada).length;
+                      const gridSize = Math.max(3, activeCount + 2);
+
+                      return (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                          {Array.from({ length: gridSize }).map((_, idx) => {
+                            const isChosen = myQuadradoChoice === idx;
+                            return (
+                              <button
+                                key={`sq-${idx}`}
+                                onClick={() => handleChooseQuadrado(idx)}
+                                className={`p-6 rounded-2xl border-4 font-black text-xl transition transform shadow-xl ${isChosen ? 'bg-amber-400 text-slate-950 border-white ring-4 ring-amber-400/50 scale-105' : 'bg-slate-950 hover:bg-emerald-950 border-emerald-500/50 text-emerald-300 hover:scale-102'}`}
+                              >
+                                {isChosen ? `✓ Q #${idx + 1}` : `Quadrado #${idx + 1}`}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </div>

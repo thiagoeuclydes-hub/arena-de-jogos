@@ -347,6 +347,95 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
     }
   };
 
+  const handleToggleJogoQuadrado = async (salaId: string, currentState: boolean) => {
+    if (!db) return;
+    try {
+      await updateDoc(doc(db as any, 'salas', salaId), {
+        jogoQuadradoLiberado: !currentState
+      });
+    } catch (err) {
+      console.error("Erro ao alternar jogo do quadrado:", err);
+    }
+  };
+
+  const handleSetSecretQuadrado = async (salaId: string, squareIdx: number) => {
+    if (!db) return;
+    try {
+      await updateDoc(doc(db as any, 'salas', salaId), {
+        secretQuadradoProfessor: squareIdx
+      });
+    } catch (err) {
+      console.error("Erro ao definir quadrado secreto do professor:", err);
+    }
+  };
+
+  const handleProcessarRodadaQuadrado = async (salaId: string) => {
+    if (!db) return;
+    try {
+      const sala = salas.find(s => s.id === salaId);
+      if (!sala) return;
+
+      const profSecret = sala.secretQuadradoProfessor;
+      if (typeof profSecret !== 'number') {
+        alert('O professor precisa escolher um quadrado secreto antes de revelar!');
+        return;
+      }
+
+      const choices = sala.escolhasAlunosQuadrado || {};
+      const cadeiras = sala.cadeiras || [];
+
+      const choiceCounts: { [sq: number]: number } = {};
+      Object.values(choices).forEach((sq: any) => {
+        choiceCounts[sq] = (choiceCounts[sq] || 0) + 1;
+      });
+
+      const updatedCadeiras = cadeiras.map((c: any) => {
+        if (!c.ocupada) return c;
+        if (c.eliminadoQuadrado) return c;
+
+        const studentChoice = choices[c.id];
+        if (studentChoice === undefined) {
+          return c;
+        }
+
+        let currentScore = c.score || 0;
+        let isEliminated = false;
+
+        if (studentChoice === profSecret) {
+          isEliminated = true;
+        } else if (choiceCounts[studentChoice] > 1) {
+          currentScore -= 5;
+          if (currentScore <= 0) {
+            isEliminated = true;
+          }
+        } else {
+          currentScore += 20;
+        }
+
+        return {
+          ...c,
+          score: currentScore,
+          eliminadoQuadrado: isEliminated
+        };
+      });
+
+      const currentRodada = sala.quadradoRodadaId || 0;
+
+      await updateDoc(doc(db as any, 'salas', salaId), {
+        cadeiras: updatedCadeiras,
+        quadradoRodadaId: currentRodada + 1,
+        escolhasAlunosQuadrado: {},
+        secretQuadradoProfessor: null,
+        ultimoResultadoQuadrado: `Rodada processada! Quadrado secreto do professor era o #${profSecret + 1}.`
+      });
+
+      alert(`Rodada do Quadrado processada com sucesso! O quadrado secreto revelado era #${profSecret + 1}.`);
+    } catch (err: any) {
+      console.error("Erro ao processar rodada do quadrado:", err);
+      alert('Erro ao processar rodada: ' + (err?.message || err));
+    }
+  };
+
   // Banco de Questões handlers
   const handleOpenQuestionModal = (gameType: 'forca' | 'verdadeiro_falso' | 'quiz') => {
     setActiveQuestionGame(gameType);
@@ -789,6 +878,70 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                       </select>
                     </div>
                   </div>
+                </div>
+
+                {/* JOGO DO QUADRADO - PAINEL DO PROFESSOR */}
+                <div className="w-full p-5 bg-slate-950/90 border-2 border-emerald-500/50 rounded-3xl space-y-4 shadow-2xl">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm font-black text-emerald-300 uppercase tracking-wider">
+                        🟩 JOGO DO QUADRADO &bull; Escolha o Quadrado Secreto
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleJogoQuadrado(sala.id, sala.jogoQuadradoLiberado)}
+                      className={`px-4 py-1.5 rounded-xl font-black text-xs uppercase transition shadow ${sala.jogoQuadradoLiberado ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}
+                    >
+                      {sala.jogoQuadradoLiberado ? 'Liberado para Alunos 🔓' : 'Trancado 🔒'}
+                    </button>
+                  </div>
+
+                  {(() => {
+                    const activeCount = (sala.cadeiras || []).filter((c: any) => c.ocupada).length;
+                    const gridSize = Math.max(3, activeCount + 2);
+
+                    return (
+                      <div className="space-y-3">
+                        <p className="text-xs text-emerald-200/80">
+                          Alunos ativos na sala: <strong className="text-amber-400">{activeCount}</strong> &bull;
+                          Tabela proporcional: <strong className="text-amber-400">{gridSize} Quadrados</strong>
+                        </p>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-emerald-300 mb-1">Escolher o seu Quadrado Secreto (Professor):</label>
+                          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                            {Array.from({ length: gridSize }).map((_, idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => handleSetSecretQuadrado(sala.id, idx)}
+                                className={`p-3 rounded-xl font-black text-xs border-2 transition ${sala.secretQuadradoProfessor === idx ? 'bg-amber-400 text-slate-950 border-white ring-4 ring-white/40 scale-105' : 'bg-slate-900 text-emerald-300 border-emerald-500/40 hover:bg-emerald-950'}`}
+                              >
+                                {sala.secretQuadradoProfessor === idx ? `✓ Quadrado #${idx + 1}` : `Quadrado #${idx + 1}`}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {sala.ultimoResultadoQuadrado && (
+                          <div className="p-3 bg-emerald-500/20 border border-emerald-500/40 rounded-xl text-emerald-300 text-xs font-bold">
+                            {sala.ultimoResultadoQuadrado}
+                          </div>
+                        )}
+
+                        <div className="pt-2">
+                          <button
+                            type="button"
+                            onClick={() => handleProcessarRodadaQuadrado(sala.id)}
+                            className="w-full py-3 rounded-2xl bg-gradient-to-r from-emerald-400 to-lime-400 hover:from-emerald-300 hover:to-lime-300 text-slate-950 font-black text-xs uppercase shadow-xl transition"
+                          >
+                            🚀 Revelar Quadrado & Processar Rodada
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* JOGO DA FORCA - PAINEL DO PROFESSOR */}
