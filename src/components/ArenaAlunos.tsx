@@ -16,7 +16,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
   const [selectedSala, setSelectedSala] = useState<any>(null);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
-  const [step, setStep] = useState<'list' | 'pin' | 'profile' | 'grid' | 'arena_hub' | 'play_jogo_cores' | 'play_jogo_forca' | 'play_jogo_quiz' | 'play_jogo_quadrado'>('list');
+  const [step, setStep] = useState<'list' | 'pin' | 'profile' | 'grid' | 'arena_hub' | 'play_jogo_cores' | 'play_jogo_forca' | 'play_jogo_quiz' | 'play_jogo_quadrado' | 'play_jogo_vf'>('list');
 
   const [nome, setNome] = useState('');
   const [avatar, setAvatar] = useState('🦁');
@@ -56,6 +56,35 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
   // Jogo do Quadrado state
   const [myQuadradoChoice, setMyQuadradoChoice] = useState<number | null>(null);
   const [lastQuadradoRodadaSeen, setLastQuadradoRodadaSeen] = useState<number | null>(null);
+
+  // Jogo V/F state
+  const [lastVFRodadaAnswered, setLastVFRodadaAnswered] = useState<number | null>(null);
+  const [vfFeedback, setVfFeedback] = useState<{ text: string; correct: boolean } | null>(null);
+
+  useEffect(() => {
+    if (selectedSala?.vfRodadaId) {
+      setLastVFRodadaAnswered(null);
+      setVfFeedback(null);
+    }
+  }, [selectedSala?.vfRodadaId]);
+
+  const handleAnswerVF = (chosenIsTrue: boolean) => {
+    const currentVFRodada = selectedSala?.vfRodadaId || 0;
+    if (lastVFRodadaAnswered === currentVFRodada || vfFeedback) return;
+
+    setLastVFRodadaAnswered(currentVFRodada);
+    const correctIsTrue = selectedSala?.afirmacaoAtivaVF?.isTrue === true;
+    const isCorrect = chosenIsTrue === correctIsTrue;
+
+    if (isCorrect) {
+      addScorePoints(10);
+      setVfFeedback({ text: `🎉 Resposta Correta! +10 pts`, correct: true });
+      confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+    } else {
+      addScorePoints(-3);
+      setVfFeedback({ text: `❌ Resposta Errada! -3 pts`, correct: false });
+    }
+  };
 
   useEffect(() => {
     if (selectedSala?.palavraAtivaForca) {
@@ -862,6 +891,39 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                       </div>
                     );
                   })()}
+
+                  {/* Jogo V/F Card */}
+                  {(() => {
+                    const isVFUnlocked = selectedSala.jogoVFLiberado === true;
+
+                    return (
+                      <div
+                        onClick={() => {
+                          if (!isVFUnlocked) {
+                            alert('O Jogo V/F está trancado pelo professor no momento.');
+                            return;
+                          }
+                          setStep('play_jogo_vf');
+                          setVfFeedback(null);
+                        }}
+                        className={`border p-5 rounded-3xl transition flex flex-col justify-between ${isVFUnlocked ? 'bg-gradient-to-br from-teal-600 to-cyan-600 border-white/30 cursor-pointer shadow-xl transform hover:scale-102' : 'bg-slate-950/90 border-red-900/60 opacity-80 cursor-not-allowed'}`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h4 className="text-lg font-black text-white mb-1">✅ V / F</h4>
+                            <p className="text-[11px] text-white/90">+10 pts acerto, -3 pts erro.</p>
+                          </div>
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${isVFUnlocked ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}>
+                            {isVFUnlocked ? '🔓' : '🔒'}
+                          </span>
+                        </div>
+                        <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs font-black text-white">
+                          <span>{isVFUnlocked ? 'Jogar ➔' : 'Trancado'}</span>
+                          <span className="text-amber-200">{score} pts</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -1061,6 +1123,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                           return (
                             <div
                               key={`forca-char-${idx}-${char}`}
+                              translate="no"
                               className={`w-10 h-12 md:w-12 md:h-14 rounded-xl flex items-center justify-center text-xl md:text-2xl font-black shadow-inner ${isSpace ? 'bg-transparent border-0 text-transparent' : 'bg-[#07262c] border-2 border-amber-400 text-amber-300'}`}
                             >
                               {isSpace ? ' ' : (revealed ? char : '_')}
@@ -1098,6 +1161,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                         return (
                           <button
                             key={`kbd-${letter}`}
+                            translate="no"
                             disabled={tried || forcaFeedback !== null}
                             onClick={() => handleGuessForcaLetter(letter)}
                             className={`py-3 rounded-xl font-black text-xs md:text-sm transition shadow ${tried ? 'bg-slate-900 border border-slate-800 text-slate-600 cursor-not-allowed' : 'bg-amber-400 hover:bg-amber-300 text-slate-950 border border-amber-200 transform hover:scale-105'}`}
@@ -1252,6 +1316,78 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                         </div>
                       );
                     })()}
+                  </div>
+                )}
+              </div>
+
+            </div>
+          )}
+
+          {/* STEP 11: PLAY JOGO V/F */}
+          {step === 'play_jogo_vf' && selectedSala && (
+            <div className="bg-[#07262c] border border-cyan-500/30 rounded-3xl p-6 md:p-8 shadow-xl space-y-6 max-w-2xl mx-auto w-full text-center">
+              
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => setStep('arena_hub')}
+                  className="px-4 py-2 rounded-xl bg-slate-950 border border-cyan-500/30 text-cyan-300 font-bold text-xs"
+                >
+                  ← Voltar
+                </button>
+                <div className="bg-amber-400/20 border border-amber-400/40 px-4 py-1.5 rounded-xl">
+                  <span className="text-xs text-cyan-200 font-bold mr-2">Pontuação:</span>
+                  <span className="text-lg font-black text-amber-400">{score} pts</span>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="inline-block bg-teal-600/30 border border-teal-400 text-teal-300 text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-widest">
+                  ✅ VERDADEIRO OU FALSO &bull; ACERTO: +10 PTS | ERRO: -3 PTS
+                </div>
+
+                {!selectedSala?.afirmacaoAtivaVF ? (
+                  <div className="text-sm text-cyan-300/80 bg-slate-950 p-8 rounded-2xl border border-cyan-900 space-y-2">
+                    <p className="font-bold">Aguardando o professor escolher e liberar a afirmação V/F no painel...</p>
+                    <p className="text-xs text-cyan-400/60">Assim que o professor liberar a afirmação, ela aparecerá aqui para você!</p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="bg-slate-950 p-6 rounded-3xl border-2 border-teal-500/40 shadow-xl space-y-4">
+                      <span className="text-[11px] font-bold text-amber-400 uppercase tracking-widest block">Tema: {selectedSala.afirmacaoAtivaVF.tema || 'GERAL'}</span>
+                      <h4 className="text-lg md:text-xl font-black text-white">
+                        {selectedSala.afirmacaoAtivaVF.statement}
+                      </h4>
+
+                      {lastVFRodadaAnswered === selectedSala.vfRodadaId && (
+                        <div className="p-3 bg-amber-500/20 border border-amber-500/40 rounded-xl text-amber-300 font-bold text-xs">
+                          🔒 Resposta registrada! Aguarde o professor liberar a próxima afirmação.
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <button
+                        disabled={lastVFRodadaAnswered === selectedSala.vfRodadaId}
+                        onClick={() => handleAnswerVF(true)}
+                        className={`p-6 rounded-2xl border-2 font-black text-base transition shadow-xl ${lastVFRodadaAnswered === selectedSala.vfRodadaId ? 'opacity-50 cursor-not-allowed bg-slate-900 border-slate-800 text-slate-500' : 'bg-emerald-600 hover:bg-emerald-500 border-emerald-400 text-white transform hover:scale-105'}`}
+                      >
+                        ✓ VERDADEIRO
+                      </button>
+
+                      <button
+                        disabled={lastVFRodadaAnswered === selectedSala.vfRodadaId}
+                        onClick={() => handleAnswerVF(false)}
+                        className={`p-6 rounded-2xl border-2 font-black text-base transition shadow-xl ${lastVFRodadaAnswered === selectedSala.vfRodadaId ? 'opacity-50 cursor-not-allowed bg-slate-900 border-slate-800 text-slate-500' : 'bg-red-600 hover:bg-red-500 border-red-400 text-white transform hover:scale-105'}`}
+                      >
+                        ✕ FALSO
+                      </button>
+                    </div>
+
+                    {vfFeedback && (
+                      <div className={`p-4 rounded-2xl font-black text-sm animate-bounce ${vfFeedback.correct ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-red-500/20 text-red-300 border border-red-500/40'}`}>
+                        {vfFeedback.text}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

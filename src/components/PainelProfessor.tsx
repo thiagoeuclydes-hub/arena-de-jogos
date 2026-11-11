@@ -36,11 +36,21 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
   const [editTemaModal, setEditTemaModal] = useState(false);
   const [temaParaEditar, setTemaParaEditar] = useState('');
   const [temaEditadoNome, setTemaEditadoNome] = useState('');
+  const [deleteTemaModalOpen, setDeleteTemaModalOpen] = useState(false);
+  const [temaParaDeletar, setTemaParaDeletar] = useState('');
 
+  const [deletedTemas, setDeletedTemas] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('arena_deleted_temas');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [];
+  });
   const [questoesBanco, setQuestoesBanco] = useState<any[]>([]);
 
   const bancoTemas = questoesBanco.map(q => q.tema).filter(Boolean);
-  const temasList = Array.from(new Set([...defaultThemes, ...customTemas, ...bancoTemas]));
+  const rawTemasList = Array.from(new Set([...defaultThemes, ...customTemas, ...bancoTemas]));
+  const temasList = rawTemasList.filter(t => !deletedTemas.includes(t));
 
   // Form question fields
   const [qText, setQText] = useState('');
@@ -359,6 +369,38 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
     }
   };
 
+  const handleToggleJogoVF = async (salaId: string, currentState: boolean) => {
+    if (!db) return;
+    try {
+      await updateDoc(doc(db as any, 'salas', salaId), {
+        jogoVFLiberado: !currentState
+      });
+    } catch (err) {
+      console.error("Erro ao alternar jogo V/F:", err);
+    }
+  };
+
+  const handleLiberarAfirmacaoVF = async (salaId: string, vfItem: any) => {
+    if (!db || !vfItem) return;
+    try {
+      const sala = salas.find(s => s.id === salaId);
+      const currentRodada = sala?.vfRodadaId || 0;
+      await updateDoc(doc(db as any, 'salas', salaId), {
+        afirmacaoAtivaVF: {
+          statement: vfItem.statement,
+          isTrue: vfItem.isTrue,
+          tema: vfItem.tema
+        },
+        vfRodadaId: currentRodada + 1,
+        jogoVFLiberado: true
+      });
+      alert(`Afirmação V/F liberada com sucesso para os alunos!`);
+    } catch (err) {
+      console.error("Erro ao liberar afirmação V/F:", err);
+      alert('Erro ao liberar afirmação.');
+    }
+  };
+
   const handleToggleJogoQuadrado = async (salaId: string, currentState: boolean) => {
     if (!db) return;
     try {
@@ -487,6 +529,45 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
     setEditTemaModal(false);
     setTemaParaEditar('');
     setTemaEditadoNome('');
+  };
+
+  const handleDeleteTema = (temaToDelete: string) => {
+    setTemaParaDeletar(temaToDelete);
+    setDeleteTemaModalOpen(true);
+  };
+
+  const handleConfirmDeleteTema = () => {
+    if (!temaParaDeletar) return;
+    const temaToDelete = temaParaDeletar;
+
+    const updatedCustom = customTemas.filter(t => t !== temaToDelete);
+    const updatedDeleted = Array.from(new Set([...deletedTemas, temaToDelete]));
+    setCustomTemas(updatedCustom);
+    setDeletedTemas(updatedDeleted);
+    try {
+      localStorage.setItem('arena_custom_temas', JSON.stringify(updatedCustom));
+      localStorage.setItem('arena_deleted_temas', JSON.stringify(updatedDeleted));
+    } catch (e) {}
+
+    if (db) {
+      questoesBanco.forEach(async (q) => {
+        if (q.tema === temaToDelete) {
+          try {
+            await deleteDoc(doc(db as any, 'banco_questoes', q.id));
+          } catch (err) {
+            console.error("Erro ao apagar questão do tema:", err);
+          }
+        }
+      });
+    }
+
+    if (selectedTema === temaToDelete) {
+      setSelectedTema('BRASIL');
+    }
+
+    setDeleteTemaModalOpen(false);
+    setTemaParaDeletar('');
+    alert(`Tema "${temaToDelete}" apagado com sucesso!`);
   };
 
   const handleAddQuestion = async (e: React.FormEvent) => {
@@ -713,10 +794,11 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                 <span>📂 {tema}</span>
                 <span className="text-[10px] bg-slate-950 text-amber-300 px-2 py-0.5 rounded-lg">Abrir Tema ➔</span>
               </button>
-              {['BRASIL', 'ALAGOAS', 'CIENCIAS', 'FILME: JACK', 'FILME VINGADORES'].indexOf(tema) === -1 && (
+              <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     setEditTemaModal(true);
                     setTemaParaEditar(tema);
                     setTemaEditadoNome(tema);
@@ -726,7 +808,18 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                 >
                   <Edit3 className="w-3.5 h-3.5" />
                 </button>
-              )}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteTema(tema);
+                  }}
+                  className="p-2 rounded-xl bg-red-600/30 text-red-300 hover:bg-red-600/50 text-xs"
+                  title="Apagar Tema"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -896,6 +989,54 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                         {questoesBanco.filter(q => q.tipo === 'quiz').map(q => (
                           <option key={q.id} value={q.id}>
                             [{q.tema}] {q.question}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* JOGO V/F - PAINEL DO PROFESSOR */}
+                <div className="w-full p-5 bg-slate-950/90 border-2 border-teal-500/50 rounded-3xl space-y-4 shadow-2xl">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm font-black text-teal-300 uppercase tracking-wider">
+                        ✅ JOGO V/F &bull; Escolher e Liberar Afirmação (Uma por Uma)
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleJogoVF(sala.id, sala.jogoVFLiberado)}
+                      className={`px-4 py-1.5 rounded-xl font-black text-xs uppercase transition shadow ${sala.jogoVFLiberado ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}
+                    >
+                      {sala.jogoVFLiberado ? 'Liberado para Alunos 🔓' : 'Trancado 🔒'}
+                    </button>
+                  </div>
+
+                  <p className="text-xs text-teal-200/80">
+                    Afirmação ativa atual: <strong className="text-amber-400 font-mono text-sm">{sala.afirmacaoAtivaVF?.statement || 'Nenhuma afirmação V/F liberada ainda'}</strong>
+                  </p>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-teal-300 mb-1">Selecionar Afirmação V/F para Liberar:</label>
+                      <select
+                        onChange={(e) => {
+                          const qId = e.target.value;
+                          if (qId) {
+                            const foundQ = questoesBanco.find(q => q.id === qId);
+                            if (foundQ) {
+                              handleLiberarAfirmacaoVF(sala.id, foundQ);
+                            }
+                          }
+                          e.target.value = '';
+                        }}
+                        className="w-full bg-slate-900 border border-teal-500/40 rounded-xl px-3 py-2 text-xs text-white font-bold uppercase focus:outline-none"
+                      >
+                        <option value="">-- Escolher Afirmação V/F e Liberar --</option>
+                        {questoesBanco.filter(q => q.tipo === 'verdadeiro_falso').map(q => (
+                          <option key={q.id} value={q.id}>
+                            [{q.tema}] {q.statement} ({q.isTrue ? 'VERDADEIRO' : 'FALSO'})
                           </option>
                         ))}
                       </select>
@@ -1413,6 +1554,34 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Apagar Tema (Confirmação) */}
+      {deleteTemaModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+          <div className="bg-[#052c1e] border border-red-500/50 rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 text-center">
+            <h4 className="text-lg font-black text-white">Apagar Tema</h4>
+            <p className="text-xs text-emerald-200">
+              Deseja realmente apagar o tema <strong className="text-amber-400">"{temaParaDeletar}"</strong> e todas as suas questões do banco?
+            </p>
+            <div className="flex space-x-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteTemaModalOpen(false)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-950 border border-emerald-500/30 text-emerald-300 font-bold text-xs"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteTema}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-xs uppercase shadow-lg"
+              >
+                Sim, Apagar
+              </button>
+            </div>
           </div>
         </div>
       )}
