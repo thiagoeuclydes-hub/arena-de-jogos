@@ -242,6 +242,9 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
       const sala = salas.find(s => s.id === salaId);
       if (!sala) return;
 
+      const targetChair = sala.cadeiras.find((c: any) => c.id === chairId);
+      const studentName = targetChair?.nomeAluno;
+
       const updatedCadeiras = sala.cadeiras.map((c: any) => {
         if (c.id === chairId) {
           return { id: c.id, ocupada: false, nomeAluno: '', avatar: '', score: 0 };
@@ -249,8 +252,14 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
         return c;
       });
 
+      const currentExpelled = sala.expelledNames || [];
+      const newExpelled = studentName && !currentExpelled.includes(studentName.toUpperCase().trim())
+        ? [...currentExpelled, studentName.toUpperCase().trim()]
+        : currentExpelled;
+
       await updateDoc(doc(db as any, 'salas', salaId), {
-        cadeiras: updatedCadeiras
+        cadeiras: updatedCadeiras,
+        expelledNames: newExpelled
       });
     } catch (err) {
       console.error("Erro ao liberar cadeira:", err);
@@ -1062,13 +1071,13 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                   </div>
 
                   {(() => {
-                    const activeCount = (sala.cadeiras || []).filter((c: any) => c.ocupada).length;
-                    const gridSize = Math.max(3, activeCount + 2);
+                    const activeNonEliminated = (sala.cadeiras || []).filter((c: any) => c.ocupada && !c.eliminadoQuadrado).length;
+                    const gridSize = Math.max(2, activeNonEliminated + (activeNonEliminated === 1 ? 1 : 2));
 
                     return (
                       <div className="space-y-3">
                         <p className="text-xs text-emerald-200/80">
-                          Alunos ativos na sala: <strong className="text-amber-400">{activeCount}</strong> &bull;
+                          Alunos ativos não eliminados: <strong className="text-amber-400">{activeNonEliminated}</strong> &bull;
                           Tabela proporcional: <strong className="text-amber-400">{gridSize} Quadrados</strong>
                         </p>
 

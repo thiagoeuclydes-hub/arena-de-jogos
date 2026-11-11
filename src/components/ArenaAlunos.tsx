@@ -246,6 +246,12 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
       const docSnap = await getDoc(salaRef);
       if (docSnap.exists()) {
         const salaData = docSnap.data();
+        const expelledNames = (salaData.expelledNames || []).map((n: string) => n.toUpperCase().trim());
+        if (expelledNames.includes(cleanName.toUpperCase().trim())) {
+          alert('Você foi expulso desta sala pelo professor e não pode retornar.');
+          return;
+        }
+
         const existingChair = (salaData.cadeiras || []).find(
           (c: any) => c.ocupada && c.nomeAluno && c.nomeAluno.toUpperCase().trim() === cleanName.toUpperCase()
         );
@@ -1296,8 +1302,8 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                     </div>
 
                     {(() => {
-                      const activeCount = (selectedSala.cadeiras || []).filter((c: any) => c.ocupada).length;
-                      const gridSize = Math.max(3, activeCount + 2);
+                      const activeNonEliminated = (selectedSala.cadeiras || []).filter((c: any) => c.ocupada && !c.eliminadoQuadrado).length;
+                      const gridSize = Math.max(2, activeNonEliminated + (activeNonEliminated === 1 ? 1 : 2));
 
                       return (
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
