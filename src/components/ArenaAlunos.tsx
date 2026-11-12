@@ -16,7 +16,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
   const [selectedSala, setSelectedSala] = useState<any>(null);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
-  const [step, setStep] = useState<'list' | 'pin' | 'profile' | 'grid' | 'arena_hub' | 'play_jogo_cores' | 'play_jogo_forca' | 'play_jogo_quiz' | 'play_jogo_quadrado' | 'play_jogo_vf'>('list');
+  const [step, setStep] = useState<'list' | 'pin' | 'profile' | 'grid' | 'arena_hub' | 'play_jogo_cores' | 'play_jogo_forca' | 'play_jogo_quiz' | 'play_jogo_quadrado' | 'play_jogo_vf' | 'play_jogo_tiro_alvo'>('list');
 
   const [nome, setNome] = useState('');
   const [avatar, setAvatar] = useState('🦁');
@@ -60,6 +60,60 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
   // Jogo V/F state
   const [lastVFRodadaAnswered, setLastVFRodadaAnswered] = useState<number | null>(null);
   const [vfFeedback, setVfFeedback] = useState<{ text: string; correct: boolean } | null>(null);
+
+  // Jogo Tiro ao Alvo state
+  const [taScore, setTaScore] = useState(0);
+  const [taTimeLeft, setTaTimeLeft] = useState(30); // 30 seconds
+  const [taGameActive, setTaGameActive] = useState(false);
+  const [taTargets, setTaTargets] = useState<any[]>([]);
+  const [taGameOver, setTaGameOver] = useState(false);
+
+  useEffect(() => {
+    let timer: any = null;
+    let spawner: any = null;
+    if (taGameActive && step === 'play_jogo_tiro_alvo') {
+      timer = setInterval(() => {
+        setTaTimeLeft(prev => {
+          if (prev <= 1) {
+            setTaGameActive(false);
+            setTaGameOver(true);
+            clearInterval(timer);
+            clearInterval(spawner);
+            if (taScore > 0) {
+              addScorePoints(taScore);
+            }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      spawner = setInterval(() => {
+        if (!taGameActive) return;
+        const id = Math.random().toString(36).substring(2, 9);
+        const type = Math.random() > 0.5 ? 'vermelho' : 'azul';
+        const x = Math.floor(Math.random() * 75) + 10;
+        const y = Math.floor(Math.random() * 70) + 15;
+        setTaTargets(prev => [...prev, { id, type, x, y }]);
+        setTimeout(() => {
+          setTaTargets(prev => prev.filter(t => t.id !== id));
+        }, 1400);
+      }, 650);
+    }
+    return () => {
+      clearInterval(timer);
+      clearInterval(spawner);
+    };
+  }, [taGameActive, step, taScore]);
+
+  const startTiroAlvoGame = () => {
+    setTaScore(0);
+    setTaTimeLeft(30); // 30 seconds
+    setTaGameActive(true);
+    setTaGameOver(false);
+    setTaTargets([]);
+    setStep('play_jogo_tiro_alvo');
+  };
 
   useEffect(() => {
     if (selectedSala?.vfRodadaId) {
@@ -898,6 +952,38 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                     );
                   })()}
 
+                  {/* Jogo Tiro ao Alvo Card */}
+                  {(() => {
+                    const isTAUnlocked = selectedSala.jogoTiroAlvoLiberado === true;
+
+                    return (
+                      <div
+                        onClick={() => {
+                          if (!isTAUnlocked) {
+                            alert('O Jogo Tiro ao Alvo está trancado pelo professor no momento.');
+                            return;
+                          }
+                          startTiroAlvoGame();
+                        }}
+                        className={`border p-5 rounded-3xl transition flex flex-col justify-between ${isTAUnlocked ? 'bg-gradient-to-br from-cyan-600 to-blue-700 border-white/30 cursor-pointer shadow-xl transform hover:scale-102' : 'bg-slate-950/90 border-red-900/60 opacity-80 cursor-not-allowed'}`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h4 className="text-lg font-black text-white mb-1">🎯 TIRO AO ALVO</h4>
+                            <p className="text-[11px] text-white/90">2 min de jogo! Cada aluno pontua.</p>
+                          </div>
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${isTAUnlocked ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}>
+                            {isTAUnlocked ? '🔓' : '🔒'}
+                          </span>
+                        </div>
+                        <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs font-black text-white">
+                          <span>{isTAUnlocked ? 'Jogar ➔' : 'Trancado'}</span>
+                          <span className="text-amber-200">{score} pts</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* Jogo V/F Card */}
                   {(() => {
                     const isVFUnlocked = selectedSala.jogoVFLiberado === true;
@@ -1397,6 +1483,84 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                   </div>
                 )}
               </div>
+
+            </div>
+          )}
+
+          {/* STEP 12: PLAY JOGO TIRO AO ALVO */}
+          {step === 'play_jogo_tiro_alvo' && selectedSala && (
+            <div className="bg-[#050a14] border-2 border-cyan-400 rounded-3xl p-6 md:p-8 shadow-2xl space-y-6 max-w-4xl mx-auto w-full text-center relative overflow-hidden font-mono">
+              
+              <div className="flex items-center justify-between z-20 relative">
+                <button
+                  onClick={() => {
+                    setTaGameActive(false);
+                    setStep('arena_hub');
+                  }}
+                  className="px-4 py-2 rounded-xl bg-slate-950 border border-cyan-500/30 text-cyan-300 font-bold text-xs cursor-pointer"
+                >
+                  ← Voltar
+                </button>
+                <div className="flex items-center space-x-4">
+                  <div className="bg-cyan-950/80 border border-cyan-400 px-4 py-1.5 rounded-xl text-cyan-300 font-bold text-sm">
+                    PONTOS: <span className="text-amber-400 font-black">{taScore}</span>
+                  </div>
+                  <div className="bg-cyan-950/80 border border-cyan-400 px-4 py-1.5 rounded-xl text-cyan-300 font-bold text-sm">
+                    TEMPO: <span className="text-red-400 font-black">{taTimeLeft}s</span> (30s)
+                  </div>
+                </div>
+              </div>
+
+              {!taGameActive && !taGameOver && (
+                <div className="py-16 space-y-6 z-20 relative">
+                  <h3 className="text-3xl font-black text-cyan-400 tracking-wider">🎯 TIRO AO ALVO &bull; 30 SEGUNDOS</h3>
+                  <p className="text-sm text-cyan-200 max-w-md mx-auto">
+                    Clique nos alvos que aparecem na tela o mais rápido possível!<br/>
+                    🔵 <strong>Azul</strong> = <span className="text-cyan-300 font-bold">1 ponto</span><br/>
+                    🔴 <strong>Vermelho</strong> = <span className="text-red-400 font-bold">3 pontos</span>
+                  </p>
+                  <button
+                    onClick={() => setTaGameActive(true)}
+                    className="px-8 py-4 rounded-2xl bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 font-black text-lg uppercase shadow-2xl tracking-widest cursor-pointer hover:scale-105 transition"
+                  >
+                    COMEÇAR JOGO 🚀
+                  </button>
+                </div>
+              )}
+
+              {taGameOver && (
+                <div className="py-16 space-y-6 z-20 relative">
+                  <h3 className="text-3xl font-black text-red-500 tracking-wider">FIM DE JOGO!</h3>
+                  <p className="text-xl font-black text-amber-400">
+                    Pontuação Final Obtida: {taScore} pts (Adicionada ao seu placar da sala!)
+                  </p>
+                  <button
+                    onClick={startTiroAlvoGame}
+                    className="px-8 py-4 rounded-2xl bg-cyan-400 text-slate-950 font-black text-base uppercase shadow-xl cursor-pointer hover:bg-cyan-300 transition"
+                  >
+                    Jogar Novamente 🔄
+                  </button>
+                </div>
+              )}
+
+              {taGameActive && (
+                <div className="relative w-full h-[60vh] border border-cyan-500/40 bg-radial from-slate-900 to-slate-950 rounded-2xl overflow-hidden cursor-crosshair">
+                  {taTargets.map(t => (
+                    <div
+                      key={t.id}
+                      onClick={() => {
+                        const pts = t.type === 'vermelho' ? 3 : 1;
+                        setTaScore(prev => prev + pts);
+                        setTaTargets(prev => prev.filter(target => target.id !== t.id));
+                      }}
+                      style={{ left: `${t.x}%`, top: `${t.y}%` }}
+                      className={`absolute cursor-pointer flex items-center justify-center rounded-full transform -translate-x-1/2 -translate-y-1/2 transition ${t.type === 'vermelho' ? 'w-16 h-16 border-4 border-red-500 bg-red-500/30 shadow-[0_0_20px_#ef4444]' : 'w-14 h-14 border-4 border-blue-500 bg-blue-500/30 shadow-[0_0_20px_#3b82f6]'}`}
+                    >
+                      <span className="text-[10px] font-black text-white">{t.type === 'vermelho' ? '3P' : '1P'}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
 
             </div>
           )}

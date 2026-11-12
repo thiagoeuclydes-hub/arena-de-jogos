@@ -389,6 +389,17 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
     }
   };
 
+  const handleToggleJogoTiroAlvo = async (salaId: string, currentState: boolean) => {
+    if (!db) return;
+    try {
+      await updateDoc(doc(db as any, 'salas', salaId), {
+        jogoTiroAlvoLiberado: !currentState
+      });
+    } catch (err) {
+      console.error("Erro ao alternar jogo tiro ao alvo:", err);
+    }
+  };
+
   const handleLiberarAfirmacaoVF = async (salaId: string, vfItem: any) => {
     if (!db || !vfItem) return;
     try {
@@ -1115,6 +1126,27 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                       </div>
                     );
                   })()}
+                </div>
+
+                {/* JOGO TIRO AO ALVO - PAINEL DO PROFESSOR */}
+                <div className="w-full p-5 bg-slate-950/90 border-2 border-cyan-500/50 rounded-3xl space-y-4 shadow-2xl">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm font-black text-cyan-300 uppercase tracking-wider">
+                        🎯 TIRO AO ALVO &bull; Cada aluno joga por 2 minutos na sua tela
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleJogoTiroAlvo(sala.id, sala.jogoTiroAlvoLiberado)}
+                      className={`px-4 py-1.5 rounded-xl font-black text-xs uppercase transition shadow ${sala.jogoTiroAlvoLiberado ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}
+                    >
+                      {sala.jogoTiroAlvoLiberado ? 'Liberado para Alunos 🔓' : 'Trancado 🔒'}
+                    </button>
+                  </div>
+                  <p className="text-xs text-cyan-200/80">
+                    Ao liberar, cada aluno na sala poderá acessar o Tiro ao Alvo e acumular pontos por 2 minutos diretamente na pontuação da sala!
+                  </p>
                 </div>
 
                 {/* JOGO DA FORCA - PAINEL DO PROFESSOR */}
