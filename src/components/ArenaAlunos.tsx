@@ -1244,7 +1244,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                           const revealed = isSpace || guessedForcaLetters.includes(char) || forcaFeedback !== null;
                           return (
                             <div
-                              key={`forca-char-${idx}-${char}`}
+                              key={`forca-char-${idx}`}
                               translate="no"
                               className={`w-7 h-9 md:w-9 md:h-11 shrink-0 rounded-lg flex items-center justify-center text-sm md:text-lg font-black shadow-inner ${isSpace ? 'bg-transparent border-0 w-4' : 'bg-[#07262c] border-2 border-amber-400 text-amber-300'}`}
                             >
