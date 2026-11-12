@@ -751,8 +751,10 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
     if (window.confirm('Deseja apagar esta questão do banco?')) {
       try {
         await deleteDoc(doc(db as any, 'banco_questoes', id));
-      } catch (err) {
+        alert('Questão apagada com sucesso!');
+      } catch (err: any) {
         console.error("Erro ao apagar questão:", err);
+        alert('Erro ao apagar questão: ' + (err?.message || err));
       }
     }
   };

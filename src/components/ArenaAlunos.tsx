@@ -1238,7 +1238,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
 
                     {/* Word display */}
                     <div className="bg-slate-950 p-8 rounded-3xl border-2 border-amber-500/40 shadow-xl space-y-6">
-                      <div className="flex flex-wrap justify-center gap-3">
+                      <div className="flex flex-row flex-nowrap items-center justify-center gap-1.5 overflow-x-auto py-2 px-1 max-w-full">
                         {currentForcaWord.word.split('').map((char, idx) => {
                           const isSpace = char === ' ' || char === '-';
                           const revealed = isSpace || guessedForcaLetters.includes(char) || forcaFeedback !== null;
@@ -1246,7 +1246,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                             <div
                               key={`forca-char-${idx}-${char}`}
                               translate="no"
-                              className={`w-10 h-12 md:w-12 md:h-14 rounded-xl flex items-center justify-center text-xl md:text-2xl font-black shadow-inner ${isSpace ? 'bg-transparent border-0 text-transparent' : 'bg-[#07262c] border-2 border-amber-400 text-amber-300'}`}
+                              className={`w-7 h-9 md:w-9 md:h-11 shrink-0 rounded-lg flex items-center justify-center text-sm md:text-lg font-black shadow-inner ${isSpace ? 'bg-transparent border-0 w-4' : 'bg-[#07262c] border-2 border-amber-400 text-amber-300'}`}
                             >
                               {isSpace ? ' ' : (revealed ? char : '_')}
                             </div>
