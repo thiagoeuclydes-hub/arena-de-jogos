@@ -48,6 +48,54 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
   });
   const [questoesBanco, setQuestoesBanco] = useState<any[]>([]);
 
+  const [roomGameThemes, setRoomGameThemes] = useState<{ [key: string]: string }>({});
+
+  const getSelectedThemeForRoomGame = (salaId: string, game: string) => {
+    const key = `${salaId}_${game}`;
+    return roomGameThemes[key] || temasList[0] || 'BRASIL';
+  };
+
+  const setSelectedThemeForRoomGame = (salaId: string, game: string, tema: string) => {
+    const key = `${salaId}_${game}`;
+    setRoomGameThemes(prev => ({ ...prev, [key]: tema }));
+  };
+
+  const handleReleaseQuizFromTheme = async (salaId: string, q: any) => {
+    if (!db) return;
+    try {
+      await handleLiberarPerguntaQuiz(salaId, q);
+      await updateDoc(doc(db as any, 'banco_questoes', q.id), { usada: true });
+      alert(`Pergunta de Quiz liberada com sucesso!`);
+    } catch (err: any) {
+      console.error("Erro ao liberar quiz:", err);
+      alert('Erro ao liberar quiz: ' + (err?.message || err));
+    }
+  };
+
+  const handleReleaseVFFromTheme = async (salaId: string, q: any) => {
+    if (!db) return;
+    try {
+      await handleLiberarAfirmacaoVF(salaId, q);
+      await updateDoc(doc(db as any, 'banco_questoes', q.id), { usada: true });
+      alert(`Afirmação V/F liberada com sucesso!`);
+    } catch (err: any) {
+      console.error("Erro ao liberar V/F:", err);
+      alert('Erro ao liberar V/F: ' + (err?.message || err));
+    }
+  };
+
+  const handleReleaseForcaFromTheme = async (salaId: string, q: any) => {
+    if (!db) return;
+    try {
+      await handleLiberarPalavraForca(salaId, q.word, q.hint);
+      await updateDoc(doc(db as any, 'banco_questoes', q.id), { usada: true });
+      alert(`Palavra da Forca liberada com sucesso!`);
+    } catch (err: any) {
+      console.error("Erro ao liberar Forca:", err);
+      alert('Erro ao liberar Forca: ' + (err?.message || err));
+    }
+  };
+
   const [roomPickerModalOpen, setRoomPickerModalOpen] = useState(false);
   const [questionToRelease, setQuestionToRelease] = useState<any>(null);
 
@@ -1013,7 +1061,7 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
                       <span className="text-sm font-black text-blue-300 uppercase tracking-wider">
-                        ❓ JOGO DO QUIZ &bull; Escolher e Liberar Pergunta (Uma por Uma)
+                        ❓ JOGO DO QUIZ &bull; Escolha o Tema e Libere a Pergunta
                       </span>
                     </div>
                     <button
@@ -1029,30 +1077,62 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                     Pergunta ativa atual: <strong className="text-amber-400 font-mono text-sm">{sala.perguntaAtivaQuiz?.question || 'Nenhuma pergunta liberada ainda'}</strong>
                   </p>
 
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-[11px] font-bold text-blue-300 mb-1">Selecionar Pergunta de Quiz para Liberar:</label>
-                      <select
-                        onChange={(e) => {
-                          const qId = e.target.value;
-                          if (qId) {
-                            const foundQ = questoesBanco.find(q => q.id === qId);
-                            if (foundQ) {
-                              handleLiberarPerguntaQuiz(sala.id, foundQ);
-                            }
-                          }
-                          e.target.value = '';
-                        }}
-                        className="w-full bg-slate-900 border border-blue-500/40 rounded-xl px-3 py-2 text-xs text-white font-bold uppercase focus:outline-none"
-                      >
-                        <option value="">-- Escolher Pergunta de Quiz e Liberar --</option>
-                        {questoesBanco.filter(q => q.tipo === 'quiz').map(q => (
-                          <option key={q.id} value={q.id}>
-                            [{q.tema}] {q.question}
-                          </option>
-                        ))}
-                      </select>
+                  {/* Theme Selector Checkboxes/Pills */}
+                  <div className="space-y-2">
+                    <label className="block text-[11px] font-bold text-blue-300 uppercase tracking-wider">1. Escolha o Tema:</label>
+                    <div className="flex flex-wrap gap-2">
+                      {temasList.map(tema => {
+                        const active = getSelectedThemeForRoomGame(sala.id, 'quiz') === tema;
+                        return (
+                          <button
+                            key={`quiz-tema-${tema}`}
+                            type="button"
+                            onClick={() => setSelectedThemeForRoomGame(sala.id, 'quiz', tema)}
+                            className={`px-3 py-1.5 rounded-xl font-bold text-xs border transition flex items-center space-x-1.5 ${active ? 'bg-blue-600 text-white border-blue-400 shadow-md scale-105' : 'bg-slate-900 text-cyan-300 border-cyan-900 hover:bg-slate-800'}`}
+                          >
+                            <span className={`w-3 h-3 rounded-full border border-white/40 flex items-center justify-center text-[9px] ${active ? 'bg-white text-blue-900 font-black' : 'bg-slate-950'}`}>✓</span>
+                            <span>{tema}</span>
+                          </button>
+                        );
+                      })}
                     </div>
+                  </div>
+
+                  {/* Questions List for Selected Theme */}
+                  <div className="space-y-2 pt-2">
+                    <label className="block text-[11px] font-bold text-blue-300 uppercase tracking-wider">
+                      2. Questões do Tema "{getSelectedThemeForRoomGame(sala.id, 'quiz')}":
+                    </label>
+                    {questoesBanco.filter(q => q.tipo === 'quiz' && q.tema === getSelectedThemeForRoomGame(sala.id, 'quiz')).length === 0 ? (
+                      <div className="text-xs text-cyan-300/60 p-4 bg-slate-900 rounded-2xl border border-cyan-900 text-center">
+                        Nenhuma questão de Quiz cadastrada neste tema.
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                        {questoesBanco
+                          .filter(q => q.tipo === 'quiz' && q.tema === getSelectedThemeForRoomGame(sala.id, 'quiz'))
+                          .map(q => (
+                            <div
+                              key={q.id}
+                              className={`p-3 rounded-2xl border flex items-center justify-between text-xs transition ${q.usada ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-200' : 'bg-slate-900 border-blue-500/40 text-white'}`}
+                            >
+                              <div className="pr-4 flex-1">
+                                <strong className="block text-amber-400 font-bold mb-0.5">
+                                  {q.question} {q.usada && <span className="text-emerald-400 ml-2 font-black">(✓ Já Usada / Liberada)</span>}
+                                </strong>
+                                <span className="text-[10px] text-cyan-300/70">Opções: {q.options?.join(', ')} (Correta: {(q.correctIndex ?? 0) + 1})</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleReleaseQuizFromTheme(sala.id, q)}
+                                className={`px-4 py-2 rounded-xl font-black text-xs uppercase shadow transition shrink-0 ${q.usada ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' : 'bg-amber-400 hover:bg-amber-300 text-slate-950'}`}
+                              >
+                                {q.usada ? 'Liberar Novamente' : 'Liberar 🚀'}
+                              </button>
+                            </div>
+                          ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1061,7 +1141,7 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
                       <span className="text-sm font-black text-teal-300 uppercase tracking-wider">
-                        ✅ JOGO V/F &bull; Escolher e Liberar Afirmação (Uma por Uma)
+                        ✅ JOGO V/F &bull; Escolha o Tema e Libere a Afirmação
                       </span>
                     </div>
                     <button
@@ -1077,30 +1157,62 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                     Afirmação ativa atual: <strong className="text-amber-400 font-mono text-sm">{sala.afirmacaoAtivaVF?.statement || 'Nenhuma afirmação V/F liberada ainda'}</strong>
                   </p>
 
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-[11px] font-bold text-teal-300 mb-1">Selecionar Afirmação V/F para Liberar:</label>
-                      <select
-                        onChange={(e) => {
-                          const qId = e.target.value;
-                          if (qId) {
-                            const foundQ = questoesBanco.find(q => q.id === qId);
-                            if (foundQ) {
-                              handleLiberarAfirmacaoVF(sala.id, foundQ);
-                            }
-                          }
-                          e.target.value = '';
-                        }}
-                        className="w-full bg-slate-900 border border-teal-500/40 rounded-xl px-3 py-2 text-xs text-white font-bold uppercase focus:outline-none"
-                      >
-                        <option value="">-- Escolher Afirmação V/F e Liberar --</option>
-                        {questoesBanco.filter(q => q.tipo === 'verdadeiro_falso').map(q => (
-                          <option key={q.id} value={q.id}>
-                            [{q.tema}] {q.statement} ({q.isTrue ? 'VERDADEIRO' : 'FALSO'})
-                          </option>
-                        ))}
-                      </select>
+                  {/* Theme Selector Checkboxes/Pills */}
+                  <div className="space-y-2">
+                    <label className="block text-[11px] font-bold text-teal-300 uppercase tracking-wider">1. Escolha o Tema:</label>
+                    <div className="flex flex-wrap gap-2">
+                      {temasList.map(tema => {
+                        const active = getSelectedThemeForRoomGame(sala.id, 'vf') === tema;
+                        return (
+                          <button
+                            key={`vf-tema-${tema}`}
+                            type="button"
+                            onClick={() => setSelectedThemeForRoomGame(sala.id, 'vf', tema)}
+                            className={`px-3 py-1.5 rounded-xl font-bold text-xs border transition flex items-center space-x-1.5 ${active ? 'bg-teal-600 text-white border-teal-400 shadow-md scale-105' : 'bg-slate-900 text-cyan-300 border-cyan-900 hover:bg-slate-800'}`}
+                          >
+                            <span className={`w-3 h-3 rounded-full border border-white/40 flex items-center justify-center text-[9px] ${active ? 'bg-white text-teal-900 font-black' : 'bg-slate-950'}`}>✓</span>
+                            <span>{tema}</span>
+                          </button>
+                        );
+                      })}
                     </div>
+                  </div>
+
+                  {/* Questions List for Selected Theme */}
+                  <div className="space-y-2 pt-2">
+                    <label className="block text-[11px] font-bold text-teal-300 uppercase tracking-wider">
+                      2. Afirmações do Tema "{getSelectedThemeForRoomGame(sala.id, 'vf')}":
+                    </label>
+                    {questoesBanco.filter(q => q.tipo === 'verdadeiro_falso' && q.tema === getSelectedThemeForRoomGame(sala.id, 'vf')).length === 0 ? (
+                      <div className="text-xs text-cyan-300/60 p-4 bg-slate-900 rounded-2xl border border-cyan-900 text-center">
+                        Nenhuma afirmação V/F cadastrada neste tema.
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                        {questoesBanco
+                          .filter(q => q.tipo === 'verdadeiro_falso' && q.tema === getSelectedThemeForRoomGame(sala.id, 'vf'))
+                          .map(q => (
+                            <div
+                              key={q.id}
+                              className={`p-3 rounded-2xl border flex items-center justify-between text-xs transition ${q.usada ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-200' : 'bg-slate-900 border-teal-500/40 text-white'}`}
+                            >
+                              <div className="pr-4 flex-1">
+                                <strong className="block text-amber-400 font-bold mb-0.5">
+                                  {q.statement} {q.usada && <span className="text-emerald-400 ml-2 font-black">(✓ Já Usada / Liberada)</span>}
+                                </strong>
+                                <span className="text-[10px] text-cyan-300/70">Resposta: {q.isTrue ? 'VERDADEIRO' : 'FALSO'}</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleReleaseVFFromTheme(sala.id, q)}
+                                className={`px-4 py-2 rounded-xl font-black text-xs uppercase shadow transition shrink-0 ${q.usada ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' : 'bg-amber-400 hover:bg-amber-300 text-slate-950'}`}
+                              >
+                                {q.usada ? 'Liberar Novamente' : 'Liberar 🚀'}
+                              </button>
+                            </div>
+                          ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1194,7 +1306,7 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
                       <span className="text-sm font-black text-amber-300 uppercase tracking-wider">
-                        🔤 JOGO DA FORCA &bull; Escolher e Liberar Palavra (Uma por Uma)
+                        🔤 JOGO DA FORCA &bull; Escolha o Tema e Libere a Palavra
                       </span>
                     </div>
                     <button
@@ -1211,28 +1323,62 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                     {sala.dicaAtivaForca && <span> (Dica: {sala.dicaAtivaForca})</span>}
                   </p>
 
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-[11px] font-bold text-amber-300 mb-1">Selecionar Palavra do Banco de Questões para Liberar:</label>
-                      <select
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val) {
-                            const [w, h] = val.split('|||');
-                            handleLiberarPalavraForca(sala.id, w, h);
-                          }
-                          e.target.value = '';
-                        }}
-                        className="w-full bg-slate-900 border border-amber-500/40 rounded-xl px-3 py-2 text-xs text-white font-bold uppercase focus:outline-none"
-                      >
-                        <option value="">-- Escolher do Banco de Questões e Liberar --</option>
-                        {questoesBanco.filter(q => q.tipo === 'forca').map(q => (
-                          <option key={q.id} value={`${q.word}|||${q.hint || ''}`}>
-                            [{q.tema}] {q.word} - Dica: {q.hint}
-                          </option>
-                        ))}
-                      </select>
+                  {/* Theme Selector Checkboxes/Pills */}
+                  <div className="space-y-2">
+                    <label className="block text-[11px] font-bold text-amber-300 uppercase tracking-wider">1. Escolha o Tema:</label>
+                    <div className="flex flex-wrap gap-2">
+                      {temasList.map(tema => {
+                        const active = getSelectedThemeForRoomGame(sala.id, 'forca') === tema;
+                        return (
+                          <button
+                            key={`forca-tema-${tema}`}
+                            type="button"
+                            onClick={() => setSelectedThemeForRoomGame(sala.id, 'forca', tema)}
+                            className={`px-3 py-1.5 rounded-xl font-bold text-xs border transition flex items-center space-x-1.5 ${active ? 'bg-amber-600 text-white border-amber-400 shadow-md scale-105' : 'bg-slate-900 text-cyan-300 border-cyan-900 hover:bg-slate-800'}`}
+                          >
+                            <span className={`w-3 h-3 rounded-full border border-white/40 flex items-center justify-center text-[9px] ${active ? 'bg-white text-amber-900 font-black' : 'bg-slate-950'}`}>✓</span>
+                            <span>{tema}</span>
+                          </button>
+                        );
+                      })}
                     </div>
+                  </div>
+
+                  {/* Questions List for Selected Theme */}
+                  <div className="space-y-2 pt-2">
+                    <label className="block text-[11px] font-bold text-amber-300 uppercase tracking-wider">
+                      2. Palavras do Tema "{getSelectedThemeForRoomGame(sala.id, 'forca')}":
+                    </label>
+                    {questoesBanco.filter(q => q.tipo === 'forca' && q.tema === getSelectedThemeForRoomGame(sala.id, 'forca')).length === 0 ? (
+                      <div className="text-xs text-cyan-300/60 p-4 bg-slate-900 rounded-2xl border border-cyan-900 text-center">
+                        Nenhuma palavra de Forca cadastrada neste tema.
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                        {questoesBanco
+                          .filter(q => q.tipo === 'forca' && q.tema === getSelectedThemeForRoomGame(sala.id, 'forca'))
+                          .map(q => (
+                            <div
+                              key={q.id}
+                              className={`p-3 rounded-2xl border flex items-center justify-between text-xs transition ${q.usada ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-200' : 'bg-slate-900 border-amber-500/40 text-white'}`}
+                            >
+                              <div className="pr-4 flex-1">
+                                <strong className="block text-amber-400 font-bold font-mono mb-0.5">
+                                  {q.word} {q.usada && <span className="text-emerald-400 ml-2 font-black font-sans">(✓ Já Usada / Liberada)</span>}
+                                </strong>
+                                <span className="text-[10px] text-cyan-300/70">Dica: {q.hint}</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleReleaseForcaFromTheme(sala.id, q)}
+                                className={`px-4 py-2 rounded-xl font-black text-xs uppercase shadow transition shrink-0 ${q.usada ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' : 'bg-amber-400 hover:bg-amber-300 text-slate-950'}`}
+                              >
+                                {q.usada ? 'Liberar Novamente' : 'Liberar 🚀'}
+                              </button>
+                            </div>
+                          ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
