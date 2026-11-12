@@ -1256,16 +1256,13 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
 
                       {/* Hint Section */}
                       <div className="pt-4 border-t border-cyan-900/60">
-                        {hintUnlocked ? (
-                          <div className="bg-amber-500/10 border border-amber-500/30 p-4 rounded-2xl text-xs text-amber-200 font-bold space-y-1">
-                            <span className="uppercase tracking-wider text-amber-400 block font-black">💡 Dica da Palavra:</span>
-                            <p>{currentForcaWord.hint}</p>
-                          </div>
-                        ) : (
-                          <div className="bg-slate-900/60 p-3 rounded-2xl text-xs text-cyan-400/70 font-bold">
-                            🔒 A Dica abrirá após você tentar/colocar 3 letras (Tentadas: {guessedForcaLetters.length}/3)
-                          </div>
-                        )}
+                        <div className={`bg-amber-500/10 border border-amber-500/30 p-4 rounded-2xl text-xs text-amber-200 font-bold space-y-1 ${hintUnlocked ? 'block' : 'hidden'}`}>
+                          <span className="uppercase tracking-wider text-amber-400 block font-black">💡 Dica da Palavra:</span>
+                          <p>{currentForcaWord.hint}</p>
+                        </div>
+                        <div className={`bg-slate-900/60 p-3 rounded-2xl text-xs text-cyan-400/70 font-bold ${!hintUnlocked ? 'block' : 'hidden'}`}>
+                          🔒 A Dica abrirá após você tentar/colocar 3 letras (Tentadas: {guessedForcaLetters.length}/3)
+                        </div>
                       </div>
                     </div>
 
