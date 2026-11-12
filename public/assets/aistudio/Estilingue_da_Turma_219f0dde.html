@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Estilingue da Turma</title>
+<style>
+:root{--bg:#1d3b2f;--card:#fffbe9;--ink:#3a2a14;--accent:#e8452c;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1f18;--card:#2a2418;--ink:#f6ead0;--accent:#ff6a4d}}
+:root[data-theme="dark"]{--bg:#0f1f18;--card:#2a2418;--ink:#f6ead0;--accent:#ff6a4d}
+html,body{height:100%;margin:0}
+body{background:var(--bg);font-family:"Trebuchet MS",Verdana,sans-serif;color:var(--ink);display:flex;align-items:center;justify-content:center}
+#stage{position:relative;width:100%;max-width:min(100vw,calc(100vh*16/9));aspect-ratio:16/9;background:#000}
+canvas{width:100%;height:100%;display:block;touch-action:none}
+#hud{position:absolute;top:0;left:0;right:0;display:flex;gap:8px;justify-content:space-between;padding:6px 10px;font-weight:700;color:#fff;text-shadow:0 1px 3px #000;font-size:clamp(11px,2.2vw,20px);pointer-events:none}
+#btns{position:absolute;bottom:6px;right:8px;display:flex;gap:6px}
+button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:6px 12px;background:var(--accent);color:#fff;cursor:pointer}
+#btns button{font-size:clamp(10px,1.8vw,16px);opacity:.9}
+#ov{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)}
+#ov.h{display:none}
+.card{background:var(--card);color:var(--ink);border-radius:16px;padding:16px 22px;text-align:center;max-width:88%;max-height:92%;overflow:auto;font-size:clamp(12px,2vw,18px)}
+.card h1{margin:0 0 6px;font-size:1.6em}
+.card input{font:inherit;padding:4px 8px;margin:3px;border-radius:8px;border:2px solid #c9b98f;width:9em;background:#fff;color:#222}
+.card button{margin:4px}
+.card .n button{background:#8a6b3b}.card .n button.on{background:var(--accent)}
+</style></head><body>
+<div id="stage"><canvas id="c" width="800" height="450"></canvas>
+<div id="hud"><span id="h1"></span><span id="h2"></span><span id="h3"></span></div>
+<div id="btns"><button id="rs">↻ Reiniciar</button><button id="sk">Pular vez</button><button id="fs">⛶ Tela cheia</button></div>
+<div id="ov"><div class="card" id="cd"></div></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+<script>
+const {Engine,Bodies,Composite,Body,Vector}=Matter;
+const cv=document.getElementById('c'),ctx=cv.getContext('2d'),$=id=>document.getElementById(id);
+const A={x:130,y:318},GY=410,MAXD=85;
+const MAT={wood:{hp:70,d:.0012,c:'#c98a3e',e:'#7a4a14'},glass:{hp:30,d:.0015,c:'rgba(150,220,240,.75)',e:'#5aa9c4'},stone:{hp:170,d:.003,c:'#9a9a9a',e:'#555'}};
+let eng,blocks,pigs,bird,left,state,fr,still,drag,teams=[],nT=2,turn=0,lvScore,AC;
+const LV=[
+ {birds:3,f:a=>{col(a,'wood',570,385,14,50);col(a,'wood',630,385,14,50);col(a,'wood',600,354,100,12);pig(a,600,394);pig(a,600,334)}},
+ {birds:4,f:a=>{[560,620,680].forEach(x=>col(a,'wood',x,380,14,60));col(a,'glass',590,346,80,12);col(a,'glass',650,346,80,12);col(a,'stone',620,322,14,36);pig(a,590,394);pig(a,650,394);pig(a,620,292)}},
+ {birds:5,f:a=>{[540,600,660,720].forEach(x=>col(a,'glass',x,380,14,60));col(a,'wood',570,346,80,12);col(a,'wood',690,346,80,12);col(a,'stone',570,316,14,50);col(a,'stone',690,316,14,50);col(a,'wood',630,284,200,12);pig(a,570,394);pig(a,630,394);pig(a,690,394);pig(a,630,264)}}
+];
+function col(a,t,x,y,w,h){const m=MAT[t];const b=Bodies.rectangle(x,y,w,h,{density:m.d,friction:.6,restitution:.05});const o={b,t,hp:m.hp,w,h,k:'blk'};b.plugin.o=o;blocks.push(o);Composite.add(eng.world,b)}
+function pig(a,x,y){const b=Bodies.circle(x,y,15,{density:.0012,friction:.5,restitution:.1});const o={b,hp:22,k:'pig'};b.plugin.o=o;pigs.push(o);Composite.add(eng.world,b)}
+function beep(f,d=.12,t='square'){try{AC=AC||new AudioContext();const o=AC.createOscillator(),g=AC.createGain();o.type=t;o.frequency.value=f;g.gain.value=.05;g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d);o.connect(g);g.connect(AC.destination);o.start();o.stop(AC.currentTime+d)}catch(e){}}
+function load(){
+ eng=Engine.create();blocks=[];pigs=[];lvScore=0;
+ Composite.add(eng.world,Bodies.rectangle(400,GY+30,2000,60,{isStatic:true,friction:.9}));
+ const L=LV[Math.floor(turn/nT)];L.f();left=L.birds;nextBird();
+ eng.world.bodies.forEach(()=>{});
+ Matter.Events.on(eng,'collisionStart',e=>e.pairs.forEach(p=>{
+  const v=Vector.magnitude(Vector.sub(p.bodyA.velocity,p.bodyB.velocity));if(v<2.5)return;
+  let d=(v-2.5)*6;if(p.bodyA===bird||p.bodyB===bird){d*=2.5;beep(180,.08)}
+  [p.bodyA,p.bodyB].forEach(b=>{const o=b.plugin.o;if(o)o.hp-=d})}));
+ ui()}
+function nextBird(){
+ if(left<=0){bird=null;state='wait';fr=0;return}
+ bird=Bodies.circle(A.x,A.y,14,{density:.004,restitution:.3,friction:.4,frictionAir:.004,isStatic:true});
+ Composite.add(eng.world,bird);state='aim';left--;fr=0;still=0}
+function ui(){const t=teams[turn%nT];$('h1').textContent='🏫 '+t.name+' — '+t.score+' pts';$('h2').textContent='Fase '+(Math.floor(turn/nT)+1)+'/'+LV.length;$('h3').textContent='🐦 x'+(left+(bird&&state=='aim'?1:0))+'  ⭐ '+lvScore}
+function pt(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*800/r.width,y:(e.clientY-r.top)*450/r.height}}
+cv.addEventListener('pointerdown',e=>{if(state!='aim')return;const p=pt(e);if(Math.hypot(p.x-bird.position.x,p.y-bird.position.y)<55){drag=true;cv.setPointerCapture(e.pointerId)}});
+cv.addEventListener('pointermove',e=>{if(!drag)return;const p=pt(e);let dx=p.x-A.x,dy=p.y-A.y,d=Math.hypot(dx,dy);if(d>MAXD){dx*=MAXD/d;dy*=MAXD/d}Body.setPosition(bird,{x:A.x+dx,y:A.y+dy})});
+cv.addEventListener('pointerup',()=>{if(!drag)return;drag=false;const dx=A.x-bird.position.x,dy=A.y-bird.position.y;
+ if(Math.hypot(dx,dy)<14){Body.setPosition(bird,{x:A.x,y:A.y});return}
+ Body.setStatic(bird,false);Body.setVelocity(bird,{x:dx*.2,y:dy*.2});state='fly';fr=0;still=0;beep(500,.15,'triangle')});
+function step(){
+ Engine.update(eng,1000/60);
+ [blocks,pigs].forEach((arr,i)=>{for(let j=arr.length-1;j>=0;j--){const o=arr[j];if(o.hp<=0||o.b.position.x>900||o.b.position.y>520){Composite.remove(eng.world,o.b);arr.splice(j,1);lvScore+=i?500:50;beep(i?700:300,.1,i?'sine':'square');ui()}}});
+ fr++;
+ if(state=='fly'){const s=Vector.magnitude(bird.velocity);still=s<.4?still+1:0;
+  if(still>50||fr>480||bird.position.x>900||bird.position.y>500){Composite.remove(eng.world,bird);bird=null;state='wait';fr=0}}
+ else if(state=='wait'&&fr>70){if(!pigs.length)finish(true);else if(left>0)nextBird();else finish(false)}
+ ui()}
+function finish(win){state='end';const bonus=win?left*300:0;lvScore+=bonus;teams[turn%nT].score+=lvScore;
+ const st=win?(left>=2?3:left==1?2:1):0;beep(win?880:200,.4,'triangle');
+ next(win?'🎉 Fase concluída!':'😅 Acabaram os pássaros!',(win?'⭐'.repeat(st)+'<br>Bônus: '+bonus+' pts<br>':'')+'Pontos da jogada: <b>'+lvScore+'</b>')}
+function next(t,body){turn++;ov('<h1>'+t+'</h1>'+body+'<br>'+(turn>=nT*LV.length?'<button onclick="final()">Ver ranking 🏆</button>':'<button onclick="go()">Próxima: '+teams[turn%nT].name+' ▶</button>'))}
+function go(){$('ov').className='h';load()}
+function final(){const r=[...teams].sort((a,b)=>b.score-a.score);ov('<h1>🏆 Ranking final</h1>'+r.map((t,i)=>'<p>'+['🥇','🥈','🥉','4º'][i]+' <b>'+t.name+'</b>: '+t.score+' pts</p>').join('')+'<button onclick="menu()">Jogar de novo</button>')}
+function ov(h){$('cd').innerHTML=h;$('ov').className=''}
+function menu(){state='menu';let h='<h1>🐦 Estilingue da Turma</h1>Quantas equipes?<div class="n">'+[1,2,3,4].map(n=>'<button class="'+(n==nT?'on':'')+'" onclick="nT='+n+';menu()">'+n+'</button>').join('')+'</div>';
+ for(let i=0;i<nT;i++)h+='<input id="t'+i+'" value="'+(teams[i]?teams[i].name:'Equipe '+(i+1))+'" maxlength="14">';
+ h+='<p>Arraste o pássaro para trás e solte.<br>Elimine todos os monstrinhos verdes!</p><button onclick="start()">Começar ▶</button>';ov(h)}
+function start(){teams=[];for(let i=0;i<nT;i++)teams.push({name:$('t'+i).value||'Equipe '+(i+1),score:0});turn=0;go()}
+$('rs').onclick=()=>{if(state!='menu'&&state!='end'){turn=turn;load()}};
+$('sk').onclick=()=>{if(state!='menu'&&state!='end'){state='end';next('⏭ Vez pulada','Sem pontos desta vez.')}};
+$('fs').onclick=()=>{const s=$('stage');document.fullscreenElement?document.exitFullscreen():(s.requestFullscreen&&s.requestFullscreen())};
+function rr(x,y,w,h,c,e){ctx.fillStyle=c;ctx.strokeStyle=e;ctx.lineWidth=2;ctx.fillRect(-w/2,-h/2,w,h);ctx.strokeRect(-w/2,-h/2,w,h)}
+function face(r,c){ctx.fillStyle=c;ctx.beginPath();ctx.arc(0,0,r,0,7);ctx.fill();ctx.strokeStyle='#0004';ctx.lineWidth=2;ctx.stroke();
+ ctx.fillStyle='#fff';[-r*.35,r*.35].forEach(x=>{ctx.beginPath();ctx.arc(x,-r*.2,r*.3,0,7);ctx.fill()});ctx.fillStyle='#000';[-r*.3,r*.4].forEach(x=>{ctx.beginPath();ctx.arc(x,-r*.2,r*.12,0,7);ctx.fill()})}
+function drawBird(x,y,a=0){ctx.save();ctx.translate(x,y);ctx.rotate(a);face(14,'#d92b2b');ctx.fillStyle='#f5b324';ctx.beginPath();ctx.moveTo(8,2);ctx.lineTo(18,5);ctx.lineTo(8,8);ctx.fill();ctx.restore()}
+function draw(){
+ const g=ctx.createLinearGradient(0,0,0,GY);g.addColorStop(0,'#7fd4e8');g.addColorStop(1,'#d8f3e4');ctx.fillStyle=g;ctx.fillRect(0,0,800,450);
+ ctx.fillStyle='#fff';[[120,60],[420,40],[660,80]].forEach(([x,y])=>{ctx.beginPath();ctx.ellipse(x,y,45,14,0,0,7);ctx.ellipse(x+25,y-8,28,12,0,0,7);ctx.fill()});
+ ctx.fillStyle='#4fb98a';ctx.beginPath();ctx.moveTo(0,GY);ctx.quadraticCurveTo(150,200,330,GY);ctx.fill();
+ ctx.fillStyle='#35a373';ctx.beginPath();ctx.moveTo(300,GY);ctx.quadraticCurveTo(560,170,820,GY);ctx.fill();
+ ctx.fillStyle='#4aa3d8';ctx.fillRect(0,GY-14,800,14);
+ ctx.fillStyle='#6bbf3a';ctx.fillRect(0,GY,800,40);ctx.fillStyle='#7a4f24';ctx.fillRect(0,GY+14,800,40);
+ ctx.fillStyle='#2f7a3a';ctx.fillRect(95,GY-6,70,6);
+ for(let i=0;i<left;i++)drawBird(60+i*24,GY-14);
+ ctx.strokeStyle='#5a3515';ctx.lineWidth=10;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(A.x,GY);ctx.lineTo(A.x,A.y+25);ctx.moveTo(A.x,A.y+25);ctx.lineTo(A.x-14,A.y-8);ctx.moveTo(A.x,A.y+25);ctx.lineTo(A.x+14,A.y-8);ctx.stroke();
+ blocks.forEach(o=>{const b=o.b,m=MAT[o.t];ctx.save();ctx.translate(b.position.x,b.position.y);ctx.rotate(b.angle);ctx.globalAlpha=.55+.45*Math.max(0,o.hp)/m.hp;rr(0,0,o.w,o.h,m.c,m.e);ctx.restore()});
+ pigs.forEach(o=>{ctx.save();ctx.translate(o.b.position.x,o.b.position.y);ctx.rotate(o.b.angle);face(15,'#6cc24a');ctx.fillStyle='#4a9a30';ctx.beginPath();ctx.ellipse(0,6,6,4,0,0,7);ctx.fill();ctx.restore()});
+ if(bird){const p=bird.position;
+  if(state=='aim'){ctx.strokeStyle='#3a1f0a';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(A.x-14,A.y-8);ctx.lineTo(p.x,p.y);ctx.lineTo(A.x+14,A.y-8);ctx.stroke();
+   if(drag){let vx=(A.x-p.x)*.2,vy=(A.y-p.y)*.2,x=p.x,y=p.y;ctx.fillStyle='#fff';for(let i=0;i<40;i++){vy+=.278;x+=vx;y+=vy;if(i%3==0){ctx.beginPath();ctx.arc(x,y,3,0,7);ctx.fill()}}}}
+  drawBird(p.x,p.y,bird.angle)}}
+function loop(){if(state&&state!='menu'&&state!='end')step();draw();requestAnimationFrame(loop)}
+eng=Engine.create();blocks=[];pigs=[];left=3;menu();loop();
+</script></body></html>

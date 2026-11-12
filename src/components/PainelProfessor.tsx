@@ -96,6 +96,30 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
     }
   };
 
+  const handleToggleJogoEstilingue = async (salaId: string, currentState: boolean) => {
+    if (!db) return;
+    try {
+      await updateDoc(doc(db as any, 'salas', salaId), {
+        jogoEstilingueLiberado: !currentState
+      });
+    } catch (err) {
+      console.error("Erro ao alternar jogo estilingue:", err);
+    }
+  };
+
+  const handleSetEstilingueMaxPhase = async (salaId: string, phaseIdx: number) => {
+    if (!db) return;
+    try {
+      await updateDoc(doc(db as any, 'salas', salaId), {
+        estilingueMaxPhase: phaseIdx,
+        jogoEstilingueLiberado: true
+      });
+      alert(`Fase ${phaseIdx + 1} liberada para os alunos no Estilingue da Turma!`);
+    } catch (err) {
+      console.error("Erro ao liberar fase do estilingue:", err);
+    }
+  };
+
   const [roomPickerModalOpen, setRoomPickerModalOpen] = useState(false);
   const [questionToRelease, setQuestionToRelease] = useState<any>(null);
 
@@ -1299,6 +1323,47 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                   <p className="text-xs text-cyan-200/80">
                     Ao liberar, cada aluno na sala poderá acessar o Tiro ao Alvo e acumular pontos por 2 minutos diretamente na pontuação da sala!
                   </p>
+                </div>
+
+                {/* JOGO ESTILINGUE DA TURMA - PAINEL DO PROFESSOR */}
+                <div className="w-full p-5 bg-slate-950/90 border-2 border-emerald-500/50 rounded-3xl space-y-4 shadow-2xl">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm font-black text-emerald-300 uppercase tracking-wider">
+                        🐦 ESTILINGUE DA TURMA &bull; Liberar Jogo e Fases (+2 / +5 pts)
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleJogoEstilingue(sala.id, sala.jogoEstilingueLiberado)}
+                      className={`px-4 py-1.5 rounded-xl font-black text-xs uppercase transition shadow ${sala.jogoEstilingueLiberado ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}
+                    >
+                      {sala.jogoEstilingueLiberado ? 'Liberado para Alunos 🔓' : 'Trancado 🔒'}
+                    </button>
+                  </div>
+
+                  <p className="text-xs text-emerald-200/80">
+                    O professor libera as fases. Cada objeto derrubado dá +2 pontos (pedra difícil dá +5 pontos).
+                  </p>
+
+                  <div className="space-y-2">
+                    <label className="block text-[11px] font-bold text-emerald-300 uppercase tracking-wider">Liberar Fase Máxima:</label>
+                    <div className="flex gap-2">
+                      {[0, 1, 2].map(phaseIdx => {
+                        const active = (sala.estilingueMaxPhase ?? 0) === phaseIdx;
+                        return (
+                          <button
+                            key={phaseIdx}
+                            type="button"
+                            onClick={() => handleSetEstilingueMaxPhase(sala.id, phaseIdx)}
+                            className={`px-4 py-2 rounded-xl font-black text-xs border transition ${active ? 'bg-amber-400 text-slate-950 border-white ring-2 ring-white scale-105' : 'bg-slate-900 text-emerald-300 border-emerald-800 hover:bg-slate-800'}`}
+                          >
+                            {active ? `✓ Fase ${phaseIdx + 1} Ativa` : `Liberar Fase ${phaseIdx + 1}`}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
 
                 {/* JOGO DA FORCA - PAINEL DO PROFESSOR */}

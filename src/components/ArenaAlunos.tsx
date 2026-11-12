@@ -3,6 +3,7 @@ import { ArrowLeft, Key, Armchair, RefreshCw, LogOut, Gamepad2, Trophy } from 'l
 import { collection, doc, getDoc, updateDoc, onSnapshot, runTransaction } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '../firebase';
 import confetti from 'canvas-confetti';
+import { EstilingueDaTurma } from './EstilingueDaTurma';
 
 interface ArenaAlunosProps {
   onBack: () => void;
@@ -16,7 +17,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
   const [selectedSala, setSelectedSala] = useState<any>(null);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
-  const [step, setStep] = useState<'list' | 'pin' | 'profile' | 'grid' | 'arena_hub' | 'play_jogo_cores' | 'play_jogo_forca' | 'play_jogo_quiz' | 'play_jogo_quadrado' | 'play_jogo_vf' | 'play_jogo_tiro_alvo'>('list');
+  const [step, setStep] = useState<'list' | 'pin' | 'profile' | 'grid' | 'arena_hub' | 'play_jogo_cores' | 'play_jogo_forca' | 'play_jogo_quiz' | 'play_jogo_quadrado' | 'play_jogo_vf' | 'play_jogo_tiro_alvo' | 'play_jogo_estilingue'>('list');
 
   const [nome, setNome] = useState('');
   const [avatar, setAvatar] = useState('🦁');
@@ -990,6 +991,38 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                     );
                   })()}
 
+                  {/* Jogo Estilingue da Turma Card */}
+                  {(() => {
+                    const isEstilingueUnlocked = selectedSala.jogoEstilingueLiberado === true;
+
+                    return (
+                      <div
+                        onClick={() => {
+                          if (!isEstilingueUnlocked) {
+                            alert('O Estilingue da Turma está trancado pelo professor no momento.');
+                            return;
+                          }
+                          setStep('play_jogo_estilingue');
+                        }}
+                        className={`border p-5 rounded-3xl transition flex flex-col justify-between ${isEstilingueUnlocked ? 'bg-gradient-to-br from-emerald-700 to-teal-800 border-white/30 cursor-pointer shadow-xl transform hover:scale-102' : 'bg-slate-950/90 border-red-900/60 opacity-80 cursor-not-allowed'}`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h4 className="text-lg font-black text-white mb-1">🐦 ESTILINGUE</h4>
+                            <p className="text-[11px] text-white/90">+2 pts obj, +5 pts pedra!</p>
+                          </div>
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${isEstilingueUnlocked ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}>
+                            {isEstilingueUnlocked ? '🔓' : '🔒'}
+                          </span>
+                        </div>
+                        <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs font-black text-white">
+                          <span>{isEstilingueUnlocked ? 'Jogar ➔' : 'Trancado'}</span>
+                          <span className="text-amber-200">{score} pts</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* Jogo V/F Card */}
                   {(() => {
                     const isVFUnlocked = selectedSala.jogoVFLiberado === true;
@@ -1572,6 +1605,15 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
               )}
 
             </div>
+          )}
+
+          {/* STEP 13: PLAY ESTILINGUE DA TURMA */}
+          {step === 'play_jogo_estilingue' && selectedSala && (
+            <EstilingueDaTurma
+              onBack={() => setStep('arena_hub')}
+              onAddScore={(pts) => addScorePoints(pts)}
+              maxUnlockedPhase={selectedSala.estilingueMaxPhase || 0}
+            />
           )}
         </>
       )}
