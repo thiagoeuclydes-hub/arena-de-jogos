@@ -260,9 +260,6 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
           if (prev <= 1) {
             setForcaTimerActive(false);
             setForcaFeedback({ text: `⏰ Tempo esgotado (30s)! A palavra era: ${currentForcaWord.word}`, success: false });
-            setTimeout(() => {
-              handleNextForcaWord();
-            }, 3000);
             return 0;
           }
           return prev - 1;
@@ -502,15 +499,9 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
       addScorePoints(15);
       setForcaFeedback({ text: `🎉 Acertou a palavra "${currentForcaWord.word}"! +15 pts`, success: true });
       confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
-      setTimeout(() => {
-        handleNextForcaWord();
-      }, 2500);
     } else if (newMistakes >= 6) {
       setForcaTimerActive(false);
       setForcaFeedback({ text: `❌ Game Over! A palavra era: ${currentForcaWord.word}`, success: false });
-      setTimeout(() => {
-        handleNextForcaWord();
-      }, 3000);
     }
   };
 
