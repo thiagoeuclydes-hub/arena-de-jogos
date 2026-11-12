@@ -60,11 +60,26 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
     setRoomGameThemes(prev => ({ ...prev, [key]: tema }));
   };
 
+  const markQuestionAsUsedInRoom = async (salaId: string, qId: string) => {
+    if (!db || !salaId || !qId) return;
+    try {
+      const sala = salas.find(s => s.id === salaId);
+      const usadas = sala?.perguntasUsadas || [];
+      if (!usadas.includes(qId)) {
+        await updateDoc(doc(db as any, 'salas', salaId), {
+          perguntasUsadas: [...usadas, qId]
+        });
+      }
+    } catch (err) {
+      console.error("Erro ao marcar questão como usada na sala:", err);
+    }
+  };
+
   const handleReleaseQuizFromTheme = async (salaId: string, q: any) => {
     if (!db) return;
     try {
       await handleLiberarPerguntaQuiz(salaId, q);
-      await updateDoc(doc(db as any, 'banco_questoes', q.id), { usada: true });
+      await markQuestionAsUsedInRoom(salaId, q.id);
       alert(`Pergunta de Quiz liberada com sucesso!`);
     } catch (err: any) {
       console.error("Erro ao liberar quiz:", err);
@@ -76,7 +91,7 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
     if (!db) return;
     try {
       await handleLiberarAfirmacaoVF(salaId, q);
-      await updateDoc(doc(db as any, 'banco_questoes', q.id), { usada: true });
+      await markQuestionAsUsedInRoom(salaId, q.id);
       alert(`Afirmação V/F liberada com sucesso!`);
     } catch (err: any) {
       console.error("Erro ao liberar V/F:", err);
@@ -88,7 +103,7 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
     if (!db) return;
     try {
       await handleLiberarPalavraForca(salaId, q.word, q.hint);
-      await updateDoc(doc(db as any, 'banco_questoes', q.id), { usada: true });
+      await markQuestionAsUsedInRoom(salaId, q.id);
       alert(`Palavra da Forca liberada com sucesso!`);
     } catch (err: any) {
       console.error("Erro ao liberar Forca:", err);
@@ -134,9 +149,7 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
         await handleLiberarPalavraForca(salaId, q.word, q.hint);
       }
 
-      await updateDoc(doc(db as any, 'banco_questoes', q.id), {
-        usada: true
-      });
+      await markQuestionAsUsedInRoom(salaId, q.id);
 
       setRoomPickerModalOpen(false);
       setQuestionToRelease(null);
@@ -1135,26 +1148,29 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                       <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                         {questoesBanco
                           .filter(q => q.tipo === 'quiz' && q.tema === getSelectedThemeForRoomGame(sala.id, 'quiz'))
-                          .map(q => (
-                            <div
-                              key={q.id}
-                              className={`p-3 rounded-2xl border flex items-center justify-between text-xs transition ${q.usada ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-200' : 'bg-slate-900 border-blue-500/40 text-white'}`}
-                            >
-                              <div className="pr-4 flex-1">
-                                <strong className="block text-amber-400 font-bold mb-0.5">
-                                  {q.question} {q.usada && <span className="text-emerald-400 ml-2 font-black">(✓ Já Usada / Liberada)</span>}
-                                </strong>
-                                <span className="text-[10px] text-cyan-300/70">Opções: {q.options?.join(', ')} (Correta: {(q.correctIndex ?? 0) + 1})</span>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleReleaseQuizFromTheme(sala.id, q)}
-                                className={`px-4 py-2 rounded-xl font-black text-xs uppercase shadow transition shrink-0 ${q.usada ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' : 'bg-amber-400 hover:bg-amber-300 text-slate-950'}`}
+                          .map(q => {
+                            const isUsed = (sala.perguntasUsadas || []).includes(q.id);
+                            return (
+                              <div
+                                key={q.id}
+                                className={`p-3 rounded-2xl border flex items-center justify-between text-xs transition ${isUsed ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-200' : 'bg-slate-900 border-blue-500/40 text-white'}`}
                               >
-                                {q.usada ? 'Liberar Novamente' : 'Liberar 🚀'}
-                              </button>
-                            </div>
-                          ))}
+                                <div className="pr-4 flex-1">
+                                  <strong className="block text-amber-400 font-bold mb-0.5">
+                                    {q.question} {isUsed && <span className="text-emerald-400 ml-2 font-black">(✓ Já Usada / Liberada)</span>}
+                                  </strong>
+                                  <span className="text-[10px] text-cyan-300/70">Opções: {q.options?.join(', ')} (Correta: {(q.correctIndex ?? 0) + 1})</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleReleaseQuizFromTheme(sala.id, q)}
+                                  className={`px-4 py-2 rounded-xl font-black text-xs uppercase shadow transition shrink-0 ${isUsed ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' : 'bg-amber-400 hover:bg-amber-300 text-slate-950'}`}
+                                >
+                                  {isUsed ? 'Liberar Novamente' : 'Liberar 🚀'}
+                                </button>
+                              </div>
+                            );
+                          })}
                       </div>
                     )}
                   </div>
@@ -1215,26 +1231,29 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                       <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                         {questoesBanco
                           .filter(q => q.tipo === 'verdadeiro_falso' && q.tema === getSelectedThemeForRoomGame(sala.id, 'vf'))
-                          .map(q => (
-                            <div
-                              key={q.id}
-                              className={`p-3 rounded-2xl border flex items-center justify-between text-xs transition ${q.usada ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-200' : 'bg-slate-900 border-teal-500/40 text-white'}`}
-                            >
-                              <div className="pr-4 flex-1">
-                                <strong className="block text-amber-400 font-bold mb-0.5">
-                                  {q.statement} {q.usada && <span className="text-emerald-400 ml-2 font-black">(✓ Já Usada / Liberada)</span>}
-                                </strong>
-                                <span className="text-[10px] text-cyan-300/70">Resposta: {q.isTrue ? 'VERDADEIRO' : 'FALSO'}</span>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleReleaseVFFromTheme(sala.id, q)}
-                                className={`px-4 py-2 rounded-xl font-black text-xs uppercase shadow transition shrink-0 ${q.usada ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' : 'bg-amber-400 hover:bg-amber-300 text-slate-950'}`}
+                          .map(q => {
+                            const isUsed = (sala.perguntasUsadas || []).includes(q.id);
+                            return (
+                              <div
+                                key={q.id}
+                                className={`p-3 rounded-2xl border flex items-center justify-between text-xs transition ${isUsed ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-200' : 'bg-slate-900 border-teal-500/40 text-white'}`}
                               >
-                                {q.usada ? 'Liberar Novamente' : 'Liberar 🚀'}
-                              </button>
-                            </div>
-                          ))}
+                                <div className="pr-4 flex-1">
+                                  <strong className="block text-amber-400 font-bold mb-0.5">
+                                    {q.statement} {isUsed && <span className="text-emerald-400 ml-2 font-black">(✓ Já Usada / Liberada)</span>}
+                                  </strong>
+                                  <span className="text-[10px] text-cyan-300/70">Resposta: {q.isTrue ? 'VERDADEIRO' : 'FALSO'}</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleReleaseVFFromTheme(sala.id, q)}
+                                  className={`px-4 py-2 rounded-xl font-black text-xs uppercase shadow transition shrink-0 ${isUsed ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' : 'bg-amber-400 hover:bg-amber-300 text-slate-950'}`}
+                                >
+                                  {isUsed ? 'Liberar Novamente' : 'Liberar 🚀'}
+                                </button>
+                              </div>
+                            );
+                          })}
                       </div>
                     )}
                   </div>
@@ -1422,26 +1441,29 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                       <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                         {questoesBanco
                           .filter(q => q.tipo === 'forca' && q.tema === getSelectedThemeForRoomGame(sala.id, 'forca'))
-                          .map(q => (
-                            <div
-                              key={q.id}
-                              className={`p-3 rounded-2xl border flex items-center justify-between text-xs transition ${q.usada ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-200' : 'bg-slate-900 border-amber-500/40 text-white'}`}
-                            >
-                              <div className="pr-4 flex-1">
-                                <strong className="block text-amber-400 font-bold font-mono mb-0.5">
-                                  {q.word} {q.usada && <span className="text-emerald-400 ml-2 font-black font-sans">(✓ Já Usada / Liberada)</span>}
-                                </strong>
-                                <span className="text-[10px] text-cyan-300/70">Dica: {q.hint}</span>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleReleaseForcaFromTheme(sala.id, q)}
-                                className={`px-4 py-2 rounded-xl font-black text-xs uppercase shadow transition shrink-0 ${q.usada ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' : 'bg-amber-400 hover:bg-amber-300 text-slate-950'}`}
+                          .map(q => {
+                            const isUsed = (sala.perguntasUsadas || []).includes(q.id);
+                            return (
+                              <div
+                                key={q.id}
+                                className={`p-3 rounded-2xl border flex items-center justify-between text-xs transition ${isUsed ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-200' : 'bg-slate-900 border-amber-500/40 text-white'}`}
                               >
-                                {q.usada ? 'Liberar Novamente' : 'Liberar 🚀'}
-                              </button>
-                            </div>
-                          ))}
+                                <div className="pr-4 flex-1">
+                                  <strong className="block text-amber-400 font-bold font-mono mb-0.5">
+                                    {q.word} {isUsed && <span className="text-emerald-400 ml-2 font-black font-sans">(✓ Já Usada / Liberada)</span>}
+                                  </strong>
+                                  <span className="text-[10px] text-cyan-300/70">Dica: {q.hint}</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleReleaseForcaFromTheme(sala.id, q)}
+                                  className={`px-4 py-2 rounded-xl font-black text-xs uppercase shadow transition shrink-0 ${isUsed ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' : 'bg-amber-400 hover:bg-amber-300 text-slate-950'}`}
+                                >
+                                  {isUsed ? 'Liberar Novamente' : 'Liberar 🚀'}
+                                </button>
+                              </div>
+                            );
+                          })}
                       </div>
                     )}
                   </div>
