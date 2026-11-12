@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Key, Armchair, RefreshCw, LogOut, Gamepad2, Trophy } from 'lucide-react';
 import { collection, doc, getDoc, updateDoc, onSnapshot, runTransaction } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '../firebase';
@@ -68,6 +68,11 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
   const [taTargets, setTaTargets] = useState<any[]>([]);
   const [taGameOver, setTaGameOver] = useState(false);
 
+  const taScoreRef = useRef(0);
+  useEffect(() => {
+    taScoreRef.current = taScore;
+  }, [taScore]);
+
   useEffect(() => {
     let timer: any = null;
     let spawner: any = null;
@@ -79,8 +84,8 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
             setTaGameOver(true);
             clearInterval(timer);
             clearInterval(spawner);
-            if (taScore > 0) {
-              addScorePoints(taScore);
+            if (taScoreRef.current > 0) {
+              addScorePoints(taScoreRef.current);
             }
             return 0;
           }
@@ -90,21 +95,22 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
 
       spawner = setInterval(() => {
         if (!taGameActive) return;
-        const id = Math.random().toString(36).substring(2, 9);
-        const type = Math.random() > 0.5 ? 'vermelho' : 'azul';
-        const x = Math.floor(Math.random() * 75) + 10;
-        const y = Math.floor(Math.random() * 70) + 15;
-        setTaTargets(prev => [...prev, { id, type, x, y }]);
-        setTimeout(() => {
-          setTaTargets(prev => prev.filter(t => t.id !== id));
-        }, 1400);
-      }, 650);
+        const newTargets: any[] = [];
+        for (let i = 0; i < 4; i++) {
+          const id = Math.random().toString(36).substring(2, 9);
+          const type = Math.random() > 0.4 ? 'vermelho' : 'azul';
+          const x = Math.floor(Math.random() * 80) + 10;
+          const y = Math.floor(Math.random() * 75) + 12;
+          newTargets.push({ id, type, x, y });
+        }
+        setTaTargets(prev => [...prev.slice(-20), ...newTargets]);
+      }, 350);
     }
     return () => {
       clearInterval(timer);
       clearInterval(spawner);
     };
-  }, [taGameActive, step, taScore]);
+  }, [taGameActive, step]);
 
   const startTiroAlvoGame = () => {
     setTaScore(0);
@@ -1312,7 +1318,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                       )}
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-3">
                       {(selectedSala.perguntaAtivaQuiz.options || []).map((opt: string, idx: number) => {
                         const letterLabel = ['A', 'B', 'C', 'D'][idx] || String(idx + 1);
                         const isAnswered = lastQuizRodadaAnswered === selectedSala.quizRodadaId;
@@ -1322,12 +1328,12 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                             key={`quiz-opt-${idx}`}
                             disabled={isAnswered}
                             onClick={() => handleAnswerQuiz(idx)}
-                            className={`p-5 rounded-2xl border-2 font-black text-sm text-left transition flex items-center space-x-3 shadow-lg ${isAnswered ? 'opacity-50 cursor-not-allowed bg-slate-900 border-slate-800 text-slate-500' : 'bg-slate-950 hover:bg-blue-950/40 border-blue-500/40 text-white hover:border-blue-400 transform hover:scale-102'}`}
+                            className={`p-4 rounded-2xl border-2 font-black text-sm text-left transition flex items-start space-x-3 shadow-lg ${isAnswered ? 'opacity-50 cursor-not-allowed bg-slate-900 border-slate-800 text-slate-500' : 'bg-slate-950 hover:bg-blue-950/40 border-blue-500/40 text-white hover:border-blue-400'}`}
                           >
-                            <span className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-xs shrink-0">
+                            <span className="w-7 h-7 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-xs shrink-0 mt-0.5">
                               {letterLabel}
                             </span>
-                            <span className="truncate">{opt}</span>
+                            <span className="whitespace-normal break-words text-xs md:text-sm font-semibold flex-1">{opt}</span>
                           </button>
                         );
                       })}
@@ -1534,11 +1540,14 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                   <p className="text-xl font-black text-amber-400">
                     Pontuação Final Obtida: {taScore} pts (Adicionada ao seu placar da sala!)
                   </p>
+                  <p className="text-xs text-cyan-300">
+                    O jogo foi encerrado. Para jogar novamente, aguarde o professor liberar o jogo no painel.
+                  </p>
                   <button
-                    onClick={startTiroAlvoGame}
+                    onClick={() => setStep('arena_hub')}
                     className="px-8 py-4 rounded-2xl bg-cyan-400 text-slate-950 font-black text-base uppercase shadow-xl cursor-pointer hover:bg-cyan-300 transition"
                   >
-                    Jogar Novamente 🔄
+                    Voltar para a Arena ➔
                   </button>
                 </div>
               )}

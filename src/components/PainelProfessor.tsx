@@ -48,6 +48,46 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
   });
   const [questoesBanco, setQuestoesBanco] = useState<any[]>([]);
 
+  const [roomPickerModalOpen, setRoomPickerModalOpen] = useState(false);
+  const [questionToRelease, setQuestionToRelease] = useState<any>(null);
+
+  const handleExecuteReleaseQuestion = async (salaId: string, q: any) => {
+    if (!db || !q) return;
+    try {
+      if (q.tipo === 'quiz') {
+        await handleLiberarPerguntaQuiz(salaId, q);
+      } else if (q.tipo === 'verdadeiro_falso') {
+        await handleLiberarAfirmacaoVF(salaId, q);
+      } else if (q.tipo === 'forca') {
+        await handleLiberarPalavraForca(salaId, q.word, q.hint);
+      }
+
+      await updateDoc(doc(db as any, 'banco_questoes', q.id), {
+        usada: true
+      });
+
+      setRoomPickerModalOpen(false);
+      setQuestionToRelease(null);
+      alert('Questão liberada com sucesso para a sala!');
+    } catch (err: any) {
+      console.error("Erro ao liberar questão:", err);
+      alert('Erro ao liberar questão: ' + (err?.message || err));
+    }
+  };
+
+  const handleInitiateRelease = (q: any) => {
+    if (salas.length === 0) {
+      alert('Nenhuma sala criada. Crie uma sala primeiro.');
+      return;
+    }
+    if (salas.length === 1) {
+      handleExecuteReleaseQuestion(salas[0].id, q);
+    } else {
+      setQuestionToRelease(q);
+      setRoomPickerModalOpen(true);
+    }
+  };
+
   const bancoTemas = questoesBanco.map(q => q.tema).filter(Boolean);
   const rawTemasList = Array.from(new Set([...defaultThemes, ...customTemas, ...bancoTemas]));
   const temasList = rawTemasList.filter(t => !deletedTemas.includes(t));
@@ -1418,17 +1458,28 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                   ) : (
                     questoesBanco.filter(q => q.tema === selectedTema && q.tipo === 'quiz').map(q => (
                       <div key={q.id} className="flex items-center justify-between bg-[#052c1e] p-3 rounded-xl border border-emerald-800 text-xs">
-                        <div className="truncate pr-4">
-                          <strong className="text-amber-400 block">{q.question}</strong>
+                        <div className="truncate pr-4 flex-1">
+                          <strong className="text-amber-400 block">
+                            {q.question} {q.usada && <span className="text-emerald-400 font-bold ml-2">(✓ Usada / Liberada)</span>}
+                          </strong>
                           <span className="text-[10px] text-emerald-300/70">Opções: {q.options?.join(', ')} (Correta: Opção {(q.correctIndex ?? 0) + 1})</span>
                         </div>
-                        <button
-                          onClick={() => handleDeleteQuestion(q.id)}
-                          className="p-2 rounded-lg bg-red-600/20 hover:bg-red-600/40 text-red-300"
-                          title="Apagar Questão"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center space-x-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleInitiateRelease(q)}
+                            className={`px-3 py-1.5 rounded-lg font-black text-xs uppercase shadow transition ${q.usada ? 'bg-slate-800 text-slate-400 hover:bg-slate-700' : 'bg-amber-400 hover:bg-amber-300 text-slate-950'}`}
+                          >
+                            {q.usada ? 'Liberar Novamente' : 'Liberar 🚀'}
+                          </button>
+                          <button
+                            onClick={() => handleDeleteQuestion(q.id)}
+                            className="p-2 rounded-lg bg-red-600/20 hover:bg-red-600/40 text-red-300"
+                            title="Apagar Questão"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     ))
                   )}
@@ -1476,17 +1527,28 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                   ) : (
                     questoesBanco.filter(q => q.tema === selectedTema && q.tipo === 'verdadeiro_falso').map(q => (
                       <div key={q.id} className="flex items-center justify-between bg-[#052c1e] p-3 rounded-xl border border-emerald-800 text-xs">
-                        <div className="truncate pr-4">
-                          <strong className="text-amber-400 block">{q.statement}</strong>
+                        <div className="truncate pr-4 flex-1">
+                          <strong className="text-amber-400 block">
+                            {q.statement} {q.usada && <span className="text-emerald-400 font-bold ml-2">(✓ Usada / Liberada)</span>}
+                          </strong>
                           <span className="text-[10px] text-emerald-300/70">Resposta: {q.isTrue ? 'VERDADEIRO' : 'FALSO'}</span>
                         </div>
-                        <button
-                          onClick={() => handleDeleteQuestion(q.id)}
-                          className="p-2 rounded-lg bg-red-600/20 hover:bg-red-600/40 text-red-300"
-                          title="Apagar Questão"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center space-x-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleInitiateRelease(q)}
+                            className={`px-3 py-1.5 rounded-lg font-black text-xs uppercase shadow transition ${q.usada ? 'bg-slate-800 text-slate-400 hover:bg-slate-700' : 'bg-amber-400 hover:bg-amber-300 text-slate-950'}`}
+                          >
+                            {q.usada ? 'Liberar Novamente' : 'Liberar 🚀'}
+                          </button>
+                          <button
+                            onClick={() => handleDeleteQuestion(q.id)}
+                            className="p-2 rounded-lg bg-red-600/20 hover:bg-red-600/40 text-red-300"
+                            title="Apagar Questão"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     ))
                   )}
@@ -1534,17 +1596,28 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                   ) : (
                     questoesBanco.filter(q => q.tema === selectedTema && q.tipo === 'forca').map(q => (
                       <div key={q.id} className="flex items-center justify-between bg-[#052c1e] p-3 rounded-xl border border-emerald-800 text-xs">
-                        <div className="truncate pr-4">
-                          <strong className="text-amber-400 block font-mono">{q.word}</strong>
+                        <div className="truncate pr-4 flex-1">
+                          <strong className="text-amber-400 block font-mono">
+                            {q.word} {q.usada && <span className="text-emerald-400 font-bold ml-2 font-sans">(✓ Usada / Liberada)</span>}
+                          </strong>
                           <span className="text-[10px] text-emerald-300/70">Dica: {q.hint}</span>
                         </div>
-                        <button
-                          onClick={() => handleDeleteQuestion(q.id)}
-                          className="p-2 rounded-lg bg-red-600/20 hover:bg-red-600/40 text-red-300"
-                          title="Apagar Questão"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center space-x-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleInitiateRelease(q)}
+                            className={`px-3 py-1.5 rounded-lg font-black text-xs uppercase shadow transition ${q.usada ? 'bg-slate-800 text-slate-400 hover:bg-slate-700' : 'bg-amber-400 hover:bg-amber-300 text-slate-950'}`}
+                          >
+                            {q.usada ? 'Liberar Novamente' : 'Liberar 🚀'}
+                          </button>
+                          <button
+                            onClick={() => handleDeleteQuestion(q.id)}
+                            className="p-2 rounded-lg bg-red-600/20 hover:bg-red-600/40 text-red-300"
+                            title="Apagar Questão"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     ))
                   )}
@@ -1623,6 +1696,40 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                 Sim, Apagar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Escolher Sala para Liberar Questão */}
+      {roomPickerModalOpen && questionToRelease && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+          <div className="bg-[#052c1e] border-2 border-emerald-500/50 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-6">
+            <h4 className="text-xl font-black text-white text-center">Selecionar Sala para Liberar</h4>
+            <p className="text-xs text-emerald-200 text-center">
+              Escolha em qual sala deseja liberar a questão selecionada:
+            </p>
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {salas.map(s => (
+                <button
+                  key={s.id}
+                  onClick={() => handleExecuteReleaseQuestion(s.id, questionToRelease)}
+                  className="w-full text-left p-3 rounded-2xl bg-slate-900 border border-emerald-600/40 hover:bg-emerald-950 hover:border-amber-400 transition flex items-center justify-between"
+                >
+                  <span className="font-bold text-white text-sm">{s.nome}</span>
+                  <span className="text-amber-400 font-bold text-xs">Liberar aqui ➔</span>
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setRoomPickerModalOpen(false);
+                setQuestionToRelease(null);
+              }}
+              className="w-full py-3 rounded-2xl bg-slate-950 border border-emerald-500/30 text-emerald-300 font-bold text-xs"
+            >
+              Cancelar
+            </button>
           </div>
         </div>
       )}
