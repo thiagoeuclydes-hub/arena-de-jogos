@@ -297,6 +297,10 @@ export const EstilingueDaTurma: React.FC<EstilingueDaTurmaProps> = ({
       } else if (state === 'wait' && fr > 70) {
         if (!pigs.length) {
           state = 'end';
+          if (bird) {
+            Composite.remove(eng.world, bird);
+            bird = null;
+          }
           setGameWon(true);
           const alreadyDone = completedPhases.includes(activePhaseIndex);
           const bonus = alreadyDone ? 0 : (shotsTaken === 1 ? 15 : shotsTaken === 2 ? 10 : shotsTaken === 3 ? 5 : shotsTaken === 4 ? 3 : 1);
@@ -310,6 +314,10 @@ export const EstilingueDaTurma: React.FC<EstilingueDaTurmaProps> = ({
           nextBird();
         } else {
           state = 'end';
+          if (bird) {
+            Composite.remove(eng.world, bird);
+            bird = null;
+          }
           setGameOver(true);
         }
       }
@@ -480,7 +488,7 @@ export const EstilingueDaTurma: React.FC<EstilingueDaTurmaProps> = ({
   }, [activePhaseIndex]);
 
   return (
-    <div className="bg-[#0f1f18] border-2 border-emerald-500/40 rounded-3xl p-6 md:p-8 max-w-4xl mx-auto w-full text-center space-y-6 shadow-2xl font-sans text-white">
+    <div className="bg-[#0f1f18] border-2 border-emerald-500/40 rounded-3xl p-6 md:p-8 max-w-5xl mx-auto w-full text-center space-y-6 shadow-2xl font-sans text-white">
       <div className="flex items-center justify-between">
         <button
           onClick={onBack}
@@ -532,8 +540,8 @@ export const EstilingueDaTurma: React.FC<EstilingueDaTurmaProps> = ({
         })}
       </div>
 
-      <div className="relative w-full max-w-[800px] mx-auto aspect-[16/9] bg-black rounded-2xl overflow-hidden border-2 border-emerald-500/50 shadow-2xl">
-        <canvas ref={canvasRef} width={800} height={450} className="w-full h-full block touch-none" />
+      <div className="relative w-full max-w-5xl mx-auto h-[65vh] md:h-[520px] bg-black rounded-3xl overflow-hidden border-2 border-emerald-500/50 shadow-2xl">
+        <canvas ref={canvasRef} width={800} height={450} className="w-full h-full block touch-none object-contain" />
 
         {gameWon && (
           <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-center space-y-4 p-6">
