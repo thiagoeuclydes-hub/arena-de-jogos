@@ -178,6 +178,49 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
     }
   }, [selectedSala?.quadradoRodadaId]);
 
+  // Real-time lock enforcement watcher
+  useEffect(() => {
+    if (!selectedSala) return;
+
+    if (step === 'play_jogo_cores' && !selectedSala.jogoCoresLiberado) {
+      setStep('arena_hub');
+      alert('O professor trancou o Jogo das Cores!');
+    }
+    if (step === 'play_jogo_forca' && !selectedSala.jogoForcaLiberado) {
+      setStep('arena_hub');
+      alert('O professor trancou o Jogo da Forca!');
+    }
+    if (step === 'play_jogo_quiz' && !selectedSala.jogoQuizLiberado) {
+      setStep('arena_hub');
+      alert('O professor trancou o Jogo do Quiz!');
+    }
+    if (step === 'play_jogo_quadrado' && !selectedSala.jogoQuadradoLiberado) {
+      setStep('arena_hub');
+      alert('O professor trancou o Jogo do Quadrado!');
+    }
+    if (step === 'play_jogo_tiro_alvo' && !selectedSala.jogoTiroAlvoLiberado) {
+      setStep('arena_hub');
+      alert('O professor trancou o Jogo Tiro ao Alvo!');
+    }
+    if (step === 'play_jogo_estilingue' && !selectedSala.jogoEstilingueLiberado) {
+      setStep('arena_hub');
+      alert('O professor trancou o Estilingue da Turma!');
+    }
+    if (step === 'play_jogo_vf' && !selectedSala.jogoVFLiberado) {
+      setStep('arena_hub');
+      alert('O professor trancou o Jogo V/F!');
+    }
+  }, [
+    selectedSala?.jogoCoresLiberado,
+    selectedSala?.jogoForcaLiberado,
+    selectedSala?.jogoQuizLiberado,
+    selectedSala?.jogoQuadradoLiberado,
+    selectedSala?.jogoTiroAlvoLiberado,
+    selectedSala?.jogoEstilingueLiberado,
+    selectedSala?.jogoVFLiberado,
+    step
+  ]);
+
   useEffect(() => {
     if (!isFirebaseConfigured || !db) {
       setLoading(false);

@@ -8,7 +8,7 @@ interface EstilingueDaTurmaProps {
   maxUnlockedPhase?: number;
 }
 
-export const EstilingueDaTurma: React.FC<EstilingueDaTurmaProps> = ({ onBack, onAddScore, maxUnlockedPhase = 1 }) => {
+export const EstilingueDaTurma: React.FC<EstilingueDaTurmaProps> = ({ onBack, onAddScore, maxUnlockedPhase = 0 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [gameScore, setGameScore] = useState(0);
   const [birdsLeft, setBirdsLeft] = useState(3);
@@ -42,16 +42,17 @@ export const EstilingueDaTurma: React.FC<EstilingueDaTurmaProps> = ({ onBack, on
     let blocks: any[] = [];
     let pigs: any[] = [];
     let bird: any = null;
-    let left = 3;
+    let left = 4;
     let state = 'aim'; // 'aim', 'fly', 'wait', 'end'
     let fr = 0;
     let still = 0;
     let drag = false;
     let lvScore = 0;
+    let shotsTaken = 0;
 
     const LV = [
       {
-        birds: 3,
+        birds: 4,
         f: (a: any) => {
           col(a, 'wood', 570, 385, 14, 50);
           col(a, 'wood', 630, 385, 14, 50);
@@ -61,7 +62,7 @@ export const EstilingueDaTurma: React.FC<EstilingueDaTurmaProps> = ({ onBack, on
         }
       },
       {
-        birds: 4,
+        birds: 5,
         f: (a: any) => {
           [560, 620, 680].forEach(x => col(a, 'wood', x, 380, 14, 60));
           col(a, 'glass', 590, 346, 80, 12);
@@ -85,6 +86,49 @@ export const EstilingueDaTurma: React.FC<EstilingueDaTurmaProps> = ({ onBack, on
           pig(a, 630, 394);
           pig(a, 690, 394);
           pig(a, 630, 264);
+        }
+      },
+      {
+        birds: 6,
+        f: (a: any) => {
+          [520, 580, 640, 700].forEach(x => col(a, 'stone', x, 380, 14, 65));
+          col(a, 'wood', 550, 340, 120, 12);
+          col(a, 'wood', 670, 340, 120, 12);
+          col(a, 'stone', 610, 305, 14, 50);
+          col(a, 'glass', 610, 270, 90, 12);
+          pig(a, 550, 394);
+          pig(a, 670, 394);
+          pig(a, 610, 350);
+          pig(a, 610, 250);
+        }
+      },
+      {
+        birds: 6,
+        f: (a: any) => {
+          [500, 560, 620, 680, 740].forEach(x => col(a, 'wood', x, 380, 14, 60));
+          col(a, 'stone', 530, 340, 100, 12);
+          col(a, 'stone', 650, 340, 100, 12);
+          col(a, 'glass', 590, 305, 14, 45);
+          col(a, 'glass', 710, 305, 14, 45);
+          col(a, 'wood', 650, 270, 240, 12);
+          pig(a, 530, 394);
+          pig(a, 650, 394);
+          pig(a, 590, 350);
+          pig(a, 710, 350);
+        }
+      },
+      {
+        birds: 6,
+        f: (a: any) => {
+          [520, 580, 640, 700].forEach(x => col(a, 'stone', x, 380, 14, 70));
+          col(a, 'stone', 550, 335, 120, 12);
+          col(a, 'stone', 670, 335, 120, 12);
+          col(a, 'wood', 610, 290, 160, 12);
+          col(a, 'glass', 610, 250, 80, 12);
+          pig(a, 550, 394);
+          pig(a, 670, 394);
+          pig(a, 610, 350);
+          pig(a, 610, 230);
         }
       }
     ];
@@ -127,6 +171,7 @@ export const EstilingueDaTurma: React.FC<EstilingueDaTurmaProps> = ({ onBack, on
       blocks = [];
       pigs = [];
       lvScore = 0;
+      shotsTaken = 0;
       Composite.add(eng.world, Bodies.rectangle(400, GY + 30, 2000, 60, { isStatic: true, friction: 0.9 }));
       const L = LV[phaseIdx] || LV[0];
       L.f(eng);
@@ -200,6 +245,7 @@ export const EstilingueDaTurma: React.FC<EstilingueDaTurmaProps> = ({ onBack, on
         Body.setPosition(bird, { x: A.x, y: A.y });
         return;
       }
+      shotsTaken++;
       Body.setStatic(bird, false);
       Body.setVelocity(bird, { x: dx * 0.2, y: dy * 0.2 });
       state = 'fly';
@@ -244,6 +290,9 @@ export const EstilingueDaTurma: React.FC<EstilingueDaTurmaProps> = ({ onBack, on
         if (!pigs.length) {
           state = 'end';
           setGameWon(true);
+          const bonus = shotsTaken === 1 ? 15 : shotsTaken === 2 ? 10 : shotsTaken === 3 ? 5 : shotsTaken === 4 ? 3 : 1;
+          setGameScore(prev => prev + bonus);
+          onAddScore(bonus);
           confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
         } else if (left > 0) {
           nextBird();
@@ -431,7 +480,7 @@ export const EstilingueDaTurma: React.FC<EstilingueDaTurmaProps> = ({ onBack, on
 
         <div className="flex items-center space-x-4">
           <span className="text-xs font-bold bg-emerald-950 px-3 py-1.5 rounded-xl border border-emerald-800 text-emerald-300">
-            Fase {activePhaseIndex + 1} / 3 (Liberada pelo Professor)
+            Fase {activePhaseIndex + 1} / 6 (Liberada pelo Professor)
           </span>
           <div className="bg-amber-400/20 border border-amber-400/40 px-4 py-1.5 rounded-xl">
             <span className="text-xs text-amber-200 font-bold mr-2">Pontos Ganhos:</span>
@@ -444,13 +493,13 @@ export const EstilingueDaTurma: React.FC<EstilingueDaTurmaProps> = ({ onBack, on
         <h3 className="text-2xl font-black text-amber-400">🐦 ESTILINGUE DA TURMA</h3>
         <p className="text-xs text-emerald-200/80">
           Arraste o pássaro para trás e solte para derrubar blocos e monstros! <br />
-          <span className="text-cyan-300 font-bold">Madeira/Vidro = +2 pts | Pedra (difícil) = +5 pts | Monstrinho = +10 pts</span>
+          <span className="text-cyan-300 font-bold">1 bola = +15 pts | 2 bolas = +10 pts | 3 bolas = +5 pts | 4 bolas = +3 pts</span>
         </p>
       </div>
 
       {/* Phase selection unlocked by professor */}
-      <div className="flex justify-center gap-3">
-        {[0, 1, 2].map(idx => {
+      <div className="flex justify-center gap-2 flex-wrap">
+        {[0, 1, 2, 3, 4, 5].map(idx => {
           const unlocked = idx <= maxUnlockedPhase;
           const active = activePhaseIndex === idx;
           return (
@@ -462,7 +511,7 @@ export const EstilingueDaTurma: React.FC<EstilingueDaTurmaProps> = ({ onBack, on
                 setGameOver(false);
                 setGameWon(false);
               }}
-              className={`px-4 py-2 rounded-xl font-black text-xs transition ${active ? 'bg-amber-400 text-slate-950 scale-105 ring-2 ring-white' : unlocked ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-slate-900 text-slate-600 border border-slate-800 cursor-not-allowed'}`}
+              className={`px-3 py-2 rounded-xl font-black text-xs transition ${active ? 'bg-amber-400 text-slate-950 scale-105 ring-2 ring-white' : unlocked ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-slate-900 text-slate-600 border border-slate-800 cursor-not-allowed'}`}
             >
               {unlocked ? `Fase ${idx + 1} 🔓` : `Fase ${idx + 1} 🔒`}
             </button>
@@ -477,7 +526,7 @@ export const EstilingueDaTurma: React.FC<EstilingueDaTurmaProps> = ({ onBack, on
           <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-center space-y-4 p-6">
             <div className="text-3xl font-black text-emerald-400">🎉 FASE CONCLUÍDA COM SUCESSO!</div>
             <p className="text-sm text-amber-300 font-bold">Você somou {gameScore} pontos nesta partida!</p>
-            {activePhaseIndex < 2 && activePhaseIndex < maxUnlockedPhase && (
+            {activePhaseIndex < 5 && activePhaseIndex < maxUnlockedPhase && (
               <button
                 onClick={() => {
                   setActivePhaseIndex(prev => prev + 1);

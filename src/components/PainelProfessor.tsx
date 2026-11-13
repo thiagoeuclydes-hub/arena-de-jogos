@@ -1370,16 +1370,16 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                   <div className="space-y-2">
                     <label className="block text-[11px] font-bold text-emerald-300 uppercase tracking-wider">Liberar Fase Máxima:</label>
                     <div className="flex gap-2">
-                      {[0, 1, 2].map(phaseIdx => {
+                      {[0, 1, 2, 3, 4, 5].map(phaseIdx => {
                         const active = (sala.estilingueMaxPhase ?? 0) === phaseIdx;
                         return (
                           <button
                             key={phaseIdx}
                             type="button"
                             onClick={() => handleSetEstilingueMaxPhase(sala.id, phaseIdx)}
-                            className={`px-4 py-2 rounded-xl font-black text-xs border transition ${active ? 'bg-amber-400 text-slate-950 border-white ring-2 ring-white scale-105' : 'bg-slate-900 text-emerald-300 border-emerald-800 hover:bg-slate-800'}`}
+                            className={`px-3 py-2 rounded-xl font-black text-xs border transition ${active ? 'bg-amber-400 text-slate-950 border-white ring-2 ring-white scale-105' : 'bg-slate-900 text-emerald-300 border-emerald-800 hover:bg-slate-800'}`}
                           >
-                            {active ? `✓ Fase ${phaseIdx + 1} Ativa` : `Liberar Fase ${phaseIdx + 1}`}
+                            {active ? `✓ F${phaseIdx + 1}` : `Fase ${phaseIdx + 1}`}
                           </button>
                         );
                       })}
