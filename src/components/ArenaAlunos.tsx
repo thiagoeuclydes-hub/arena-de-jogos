@@ -489,6 +489,30 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
     }
   };
 
+  const handleCompleteEstilinguePhase = async (phaseIdx: number) => {
+    if (!mySalaId || !myChairId || !db) return;
+    try {
+      await runTransaction(db as any, async (transaction: any) => {
+        const salaRef = doc(db as any, 'salas', mySalaId);
+        const salaDoc = await transaction.get(salaRef);
+        if (!salaDoc.exists()) return;
+        const salaData = salaDoc.data();
+        const updatedCadeiras = (salaData.cadeiras || []).map((c: any) => {
+          if (c.id === myChairId) {
+            const completed = c.completedEstilinguePhases || [];
+            if (!completed.includes(phaseIdx)) {
+              return { ...c, completedEstilinguePhases: [...completed, phaseIdx] };
+            }
+          }
+          return c;
+        });
+        transaction.update(salaRef, { cadeiras: updatedCadeiras });
+      });
+    } catch (err) {
+      console.error("Erro ao salvar fase concluída:", err);
+    }
+  };
+
   const handleStartForca = () => {
     if (selectedSala?.palavraAtivaForca) {
       setCurrentForcaWord({
@@ -1644,6 +1668,8 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
               onBack={() => setStep('arena_hub')}
               onAddScore={(pts) => addScorePoints(pts)}
               maxUnlockedPhase={selectedSala.estilingueMaxPhase || 0}
+              completedPhases={selectedSala.cadeiras?.find((c: any) => c.id === myChairId)?.completedEstilinguePhases || []}
+              onCompletePhase={(phaseIdx) => handleCompleteEstilinguePhase(phaseIdx)}
             />
           )}
         </>

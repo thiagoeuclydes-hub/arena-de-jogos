@@ -6,9 +6,17 @@ interface EstilingueDaTurmaProps {
   onBack: () => void;
   onAddScore: (points: number) => void;
   maxUnlockedPhase?: number;
+  completedPhases?: number[];
+  onCompletePhase?: (phaseIdx: number) => void;
 }
 
-export const EstilingueDaTurma: React.FC<EstilingueDaTurmaProps> = ({ onBack, onAddScore, maxUnlockedPhase = 0 }) => {
+export const EstilingueDaTurma: React.FC<EstilingueDaTurmaProps> = ({
+  onBack,
+  onAddScore,
+  maxUnlockedPhase = 0,
+  completedPhases = [],
+  onCompletePhase
+}) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [gameScore, setGameScore] = useState(0);
   const [birdsLeft, setBirdsLeft] = useState(3);
@@ -290,9 +298,13 @@ export const EstilingueDaTurma: React.FC<EstilingueDaTurmaProps> = ({ onBack, on
         if (!pigs.length) {
           state = 'end';
           setGameWon(true);
-          const bonus = shotsTaken === 1 ? 15 : shotsTaken === 2 ? 10 : shotsTaken === 3 ? 5 : shotsTaken === 4 ? 3 : 1;
-          setGameScore(prev => prev + bonus);
-          onAddScore(bonus);
+          const alreadyDone = completedPhases.includes(activePhaseIndex);
+          const bonus = alreadyDone ? 0 : (shotsTaken === 1 ? 15 : shotsTaken === 2 ? 10 : shotsTaken === 3 ? 5 : shotsTaken === 4 ? 3 : 1);
+          if (bonus > 0) {
+            setGameScore(prev => prev + bonus);
+            onAddScore(bonus);
+            if (onCompletePhase) onCompletePhase(activePhaseIndex);
+          }
           confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
         } else if (left > 0) {
           nextBird();
@@ -501,6 +513,7 @@ export const EstilingueDaTurma: React.FC<EstilingueDaTurmaProps> = ({ onBack, on
       <div className="flex justify-center gap-2 flex-wrap">
         {[0, 1, 2, 3, 4, 5].map(idx => {
           const unlocked = idx <= maxUnlockedPhase;
+          const isCompleted = completedPhases.includes(idx);
           const active = activePhaseIndex === idx;
           return (
             <button
@@ -511,9 +524,9 @@ export const EstilingueDaTurma: React.FC<EstilingueDaTurmaProps> = ({ onBack, on
                 setGameOver(false);
                 setGameWon(false);
               }}
-              className={`px-3 py-2 rounded-xl font-black text-xs transition ${active ? 'bg-amber-400 text-slate-950 scale-105 ring-2 ring-white' : unlocked ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-slate-900 text-slate-600 border border-slate-800 cursor-not-allowed'}`}
+              className={`px-3 py-2 rounded-xl font-black text-xs transition ${active ? 'bg-amber-400 text-slate-950 scale-105 ring-2 ring-white' : isCompleted ? 'bg-cyan-600 text-white' : unlocked ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-slate-900 text-slate-600 border border-slate-800 cursor-not-allowed'}`}
             >
-              {unlocked ? `Fase ${idx + 1} 🔓` : `Fase ${idx + 1} 🔒`}
+              {isCompleted ? `Fase ${idx + 1} ✅` : unlocked ? `Fase ${idx + 1} 🔓` : `Fase ${idx + 1} 🔒`}
             </button>
           );
         })}
@@ -525,7 +538,11 @@ export const EstilingueDaTurma: React.FC<EstilingueDaTurmaProps> = ({ onBack, on
         {gameWon && (
           <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-center space-y-4 p-6">
             <div className="text-3xl font-black text-emerald-400">🎉 FASE CONCLUÍDA COM SUCESSO!</div>
-            <p className="text-sm text-amber-300 font-bold">Você somou {gameScore} pontos nesta partida!</p>
+            {completedPhases.includes(activePhaseIndex) ? (
+              <p className="text-xs text-cyan-300 font-bold">Fase já concluída anteriormente. Nenhum ponto adicional concedido por repetição.</p>
+            ) : (
+              <p className="text-sm text-amber-300 font-bold">Você somou {gameScore} pontos nesta partida!</p>
+            )}
             {activePhaseIndex < 5 && activePhaseIndex < maxUnlockedPhase && (
               <button
                 onClick={() => {
