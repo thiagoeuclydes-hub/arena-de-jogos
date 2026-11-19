@@ -1479,7 +1479,7 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
                           <span className="text-sm font-black text-amber-300 uppercase tracking-wider">
-                            🧱 ARCADÃO PARANOID &bull; 5 Fases, 30s, Valores Aleatórios (5 a 30 pts)
+                            🧱 ARCADÃO PARANOID &bull; 5 Fases, 30s (+1, +5, +10 e +20 pts)
                           </span>
                         </div>
                         <button

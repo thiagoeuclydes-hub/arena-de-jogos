@@ -9,7 +9,10 @@ interface ArcadeParanoidProps {
   onCompleteGame?: () => void;
 }
 
-const POINT_VALUES = [5, 10, 15, 20, 25, 30];
+// 4 cores de cima para baixo (1=topo +20, 2=+10, 3=+5, 4=base +1)
+// Ou seja, debaixo para cima: +1, +5, +10 e +20
+const BRICK_COLORS = ["#d22", "#26d", "#2b2", "#2bb"];
+const BRICK_POINTS = [20, 10, 5, 1];
 
 export const ArcadeParanoid: React.FC<ArcadeParanoidProps> = ({ onBack, onAddScore, onCompleteGame }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -64,9 +67,9 @@ export const ArcadeParanoid: React.FC<ArcadeParanoidProps> = ({ onBack, onAddSco
 
     const LEVELS = [
       ["..........", "1111111111", "2222222222", "3333333333", "4444444444"],
-      ["1.1.1.1.1.", ".2.2.2.2.2", "3.3.3.3.3.", ".4.4.4.4.4", "5.5.5.5.5."],
+      ["1.1.1.1.1.", ".2.2.2.2.2", "3.3.3.3.3.", ".4.4.4.4.4", "4.4.4.4.4."],
       ["XXXXXXXXXX", "1111111111", ".22....22.", "..3333333.", "4444444444"],
-      ["1...55...1", "21..44..12", "321.33.123", "4321XX1234", "..........", "XXXXXXXXXX"],
+      ["1...11...1", "21..22..12", "321.33.123", "4321XX1234", "..........", "XXXXXXXXXX"],
       ["XXXXXXXXXX", "X11111111X", "X2XXXXXX2X", "X23333332X", "X2X4444X2X", "X23333332X", "XXXXXXXXXX"]
     ];
 
@@ -91,13 +94,14 @@ export const ArcadeParanoid: React.FC<ArcadeParanoidProps> = ({ onBack, onAddSco
       LEVELS[l].forEach((row, r) => [...row].forEach((ch, c) => {
         if (ch === ".") return;
         const x = ch === "X";
-        const randomPts = POINT_VALUES[Math.floor(Math.random() * POINT_VALUES.length)];
+        const colIdx = x ? -1 : Math.min(3, Math.max(0, +ch - 1));
+        const brickPts = x ? 20 : BRICK_POINTS[colIdx];
         bricks.push({
           x: OX + c * (BW + GAP),
           y: OY + r * (BH + GAP),
-          col: x ? -1 : +ch - 1,
+          col: colIdx,
           hp: x ? 2 : 1,
-          pts: randomPts,
+          pts: brickPts,
           alive: true
         });
       }));
@@ -203,10 +207,6 @@ export const ArcadeParanoid: React.FC<ArcadeParanoidProps> = ({ onBack, onAddSco
             if (Math.random() < 0.14) {
               caps.push({ x: b.x + BW / 2, y: b.y, t: "LVS"[Math.floor(Math.random() * 3)] });
             }
-          } else {
-            currentScore += 5;
-            setScore(currentScore);
-            onAddScore(5, 'paranoid');
           }
           break;
         }
@@ -232,9 +232,6 @@ export const ArcadeParanoid: React.FC<ArcadeParanoidProps> = ({ onBack, onAddSco
           if (c.t == "L") { pw = 110; wideT = 10000; }
           if (c.t == "V") { currentBalls = Math.min(currentBalls + 1, 9); setBalls(currentBalls); }
           if (c.t == "S") { slowT = 10000; }
-          currentScore += 50;
-          setScore(currentScore);
-          onAddScore(50, 'paranoid');
         }
       }
       caps = caps.filter(c => !c.d && c.y < H + 10);
@@ -247,8 +244,7 @@ export const ArcadeParanoid: React.FC<ArcadeParanoidProps> = ({ onBack, onAddSco
 
       for (const b of bricks) {
         if (!b.alive) continue;
-        const COLORS = ["#d22", "#26d", "#2b2", "#2bb", "#c3c"];
-        ctx.fillStyle = b.col < 0 ? (b.hp > 1 ? "#aaa" : "#666") : COLORS[b.col];
+        ctx.fillStyle = b.col < 0 ? (b.hp > 1 ? "#aaa" : "#666") : BRICK_COLORS[b.col];
         ctx.fillRect(b.x, b.y, BW, BH);
         ctx.fillStyle = "rgba(255,255,255,.35)";
         ctx.fillRect(b.x, b.y, BW, 2);
@@ -258,7 +254,7 @@ export const ArcadeParanoid: React.FC<ArcadeParanoidProps> = ({ onBack, onAddSco
         ctx.fillStyle = "#fff";
         ctx.font = "bold 9px monospace";
         ctx.textAlign = "center";
-        ctx.fillText(`${b.pts}p`, b.x + BW / 2, b.y + BH / 2 + 3);
+        ctx.fillText(`+${b.pts}`, b.x + BW / 2, b.y + BH / 2 + 3);
       }
 
       for (const c of caps) {
@@ -370,7 +366,7 @@ export const ArcadeParanoid: React.FC<ArcadeParanoidProps> = ({ onBack, onAddSco
       <div className="space-y-1">
         <h3 className="text-2xl font-black text-amber-400">🧱 ARCADÃO PARANOID</h3>
         <p className="text-xs text-emerald-200/80">
-          Destrua os tijolos (Valores aleatórios: 5, 10, 15, 20, 25 e 30 pts) em 30 segundos!
+          Destrua os tijolos em 30 segundos! Pontuação por cor (debaixo para cima): <strong className="text-cyan-300">+1</strong>, <strong className="text-emerald-400">+5</strong>, <strong className="text-blue-400">+10</strong> e <strong className="text-red-400">+20 pts</strong>.
         </p>
       </div>
 

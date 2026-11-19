@@ -1201,7 +1201,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                           <div className="flex items-start justify-between">
                             <div>
                               <h4 className="text-lg font-black text-white mb-1">🧱 PARANOID</h4>
-                              <p className="text-[11px] text-white/90">5 fases, 30s, 5 a 30 pts.</p>
+                              <p className="text-[11px] text-white/90">5 fases, 30s (+1, +5, +10 e +20 pts).</p>
                             </div>
                             <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${isCompleted ? 'bg-slate-700 text-slate-300' : isParanoidUnlocked ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}>
                               {isCompleted ? 'Concluído ✓' : isParanoidUnlocked ? '🔓' : '🔒'}
