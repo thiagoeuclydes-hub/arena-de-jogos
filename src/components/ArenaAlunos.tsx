@@ -928,41 +928,40 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
               </div>
 
               <div className="space-y-8">
-                {/* JOGOS CONTEÚDOS: V/F, Quiz e Cores */}
+                {/* JOGOS DE CONTEÚDO: V/F, Quiz e Forca */}
                 <div className="space-y-4">
                   <div className="flex items-center space-x-2 bg-gradient-to-r from-blue-900/60 to-purple-900/60 p-4 rounded-2xl border border-cyan-500/40 text-white font-black text-sm shadow-md">
                     <Gamepad2 className="w-5 h-5 text-amber-400" />
-                    <span>📚 JOGOS CONTEÚDOS (V/F, Quiz e Cores)</span>
+                    <span>📚 JOGOS DE CONTEÚDO (V/F, Quiz e Forca)</span>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {/* Jogo das Cores Card */}
+                    {/* Jogo da Forca Card */}
                     {(() => {
-                      const isUnlocked = selectedSala.jogoCoresLiberado === true;
+                      const isForcaUnlocked = selectedSala.jogoForcaLiberado === true;
 
                       return (
                         <div
                           onClick={() => {
-                            if (!isUnlocked) {
-                              alert('O Jogo das Cores está trancado pelo professor no momento.');
+                            if (!isForcaUnlocked) {
+                              alert('O Jogo da Forca está trancado pelo professor no momento.');
                               return;
                             }
-                            setStep('play_jogo_cores');
-                            setFeedbackMsg(null);
+                            handleStartForca();
                           }}
-                          className={`border p-5 rounded-3xl transition flex flex-col justify-between ${isUnlocked ? 'bg-gradient-to-br from-purple-600 to-pink-600 border-white/30 cursor-pointer shadow-xl transform hover:scale-102' : 'bg-slate-950/90 border-red-900/60 opacity-80 cursor-not-allowed'}`}
+                          className={`border p-5 rounded-3xl transition flex flex-col justify-between ${isForcaUnlocked ? 'bg-gradient-to-br from-amber-600 to-yellow-600 border-white/30 cursor-pointer shadow-xl transform hover:scale-102' : 'bg-slate-950/90 border-red-900/60 opacity-80 cursor-not-allowed'}`}
                         >
                           <div className="flex items-start justify-between">
                             <div>
-                              <h4 className="text-lg font-black text-white mb-1">🎨 CORES</h4>
-                              <p className="text-[11px] text-white/90">Evite a cor do professor!</p>
+                              <h4 className="text-lg font-black text-white mb-1">🔤 FORCA</h4>
+                              <p className="text-[11px] text-white/90">Descubra palavras! +15 pts.</p>
                             </div>
-                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${isUnlocked ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}>
-                              {isUnlocked ? '🔓' : '🔒'}
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${isForcaUnlocked ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}>
+                              {isForcaUnlocked ? '🔓' : '🔒'}
                             </span>
                           </div>
                           <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs font-black text-white">
-                            <span>{isUnlocked ? 'Jogar ➔' : 'Trancado'}</span>
+                            <span>{isForcaUnlocked ? 'Jogar ➔' : 'Trancado'}</span>
                             <span className="text-amber-200">{score} pts</span>
                           </div>
                         </div>
@@ -1041,36 +1040,37 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                 <div className="space-y-4 pt-4 border-t border-cyan-900/60">
                   <div className="flex items-center space-x-2 bg-gradient-to-r from-emerald-900/60 to-teal-900/60 p-4 rounded-2xl border border-emerald-500/40 text-white font-black text-sm shadow-md">
                     <Trophy className="w-5 h-5 text-amber-400" />
-                    <span>🏆 JOGOS DE PROVAS (Forca, Quadrado, Tiro ao Alvo, Estilingue, Arcadão Paranoid & Jogada Final)</span>
+                    <span>🏆 JOGOS DE PROVAS (Cores, Quadrado, Tiro ao Alvo, Estilingue, Arcadão Paranoid & Jogada Final)</span>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {/* Jogo da Forca Card */}
+                    {/* Jogo das Cores Card */}
                     {(() => {
-                      const isForcaUnlocked = selectedSala.jogoForcaLiberado === true;
+                      const isUnlocked = selectedSala.jogoCoresLiberado === true;
 
                       return (
                         <div
                           onClick={() => {
-                            if (!isForcaUnlocked) {
-                              alert('O Jogo da Forca está trancado pelo professor no momento.');
+                            if (!isUnlocked) {
+                              alert('O Jogo das Cores está trancado pelo professor no momento.');
                               return;
                             }
-                            handleStartForca();
+                            setStep('play_jogo_cores');
+                            setFeedbackMsg(null);
                           }}
-                          className={`border p-5 rounded-3xl transition flex flex-col justify-between ${isForcaUnlocked ? 'bg-gradient-to-br from-amber-600 to-yellow-600 border-white/30 cursor-pointer shadow-xl transform hover:scale-102' : 'bg-slate-950/90 border-red-900/60 opacity-80 cursor-not-allowed'}`}
+                          className={`border p-5 rounded-3xl transition flex flex-col justify-between ${isUnlocked ? 'bg-gradient-to-br from-purple-600 to-pink-600 border-white/30 cursor-pointer shadow-xl transform hover:scale-102' : 'bg-slate-950/90 border-red-900/60 opacity-80 cursor-not-allowed'}`}
                         >
                           <div className="flex items-start justify-between">
                             <div>
-                              <h4 className="text-lg font-black text-white mb-1">🔤 FORCA</h4>
-                              <p className="text-[11px] text-white/90">Descubra palavras! +15 pts.</p>
+                              <h4 className="text-lg font-black text-white mb-1">🎨 CORES</h4>
+                              <p className="text-[11px] text-white/90">Evite a cor do professor!</p>
                             </div>
-                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${isForcaUnlocked ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}>
-                              {isForcaUnlocked ? '🔓' : '🔒'}
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${isUnlocked ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}>
+                              {isUnlocked ? '🔓' : '🔒'}
                             </span>
                           </div>
                           <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs font-black text-white">
-                            <span>{isForcaUnlocked ? 'Jogar ➔' : 'Trancado'}</span>
+                            <span>{isUnlocked ? 'Jogar ➔' : 'Trancado'}</span>
                             <span className="text-amber-200">{score} pts</span>
                           </div>
                         </div>
