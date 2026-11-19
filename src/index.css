@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .bg-grid-pattern {
+    background-size: 50px 50px;
+    background-image: 
+      linear-gradient(to right, rgba(20, 184, 166, 0.1) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(20, 184, 166, 0.1) 1px, transparent 1px);
+  }
+}

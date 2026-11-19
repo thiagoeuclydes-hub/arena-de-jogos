@@ -1,11 +1,22 @@
-<div align="center">
+# ARENA DE JOGOS
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+Plataforma web interativa de sala de aula gamificada desenvolvida em React + Vite + Tailwind CSS + Firebase Firestore (Tempo Real).
 
-  <h1>Built with AI Studio</h2>
+## Passo a Passo para Configuração no Firebase
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+1. Acesse o [Console do Firebase](https://console.firebase.google.com/).
+2. Crie ou selecione um projeto.
+3. Ative o **Cloud Firestore** em modo de teste (ou use as regras fornecidas em `firestore.rules`).
+4. Crie um aplicativo Web nas configurações do projeto para obter as chaves de configuração.
+5. Copie as credenciais e configure as Variáveis de Ambiente no Vercel (ou no arquivo `.env` localmente):
+   - `VITE_FIREBASE_API_KEY`
+   - `VITE_FIREBASE_AUTH_DOMAIN`
+   - `VITE_FIREBASE_PROJECT_ID`
+   - `VITE_FIREBASE_STORAGE_BUCKET`
+   - `VITE_FIREBASE_MESSAGING_SENDER_ID`
+   - `VITE_FIREBASE_APP_ID`
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
-
-</div>
+## Deploy no Vercel
+- Conecte o repositório ao Vercel.
+- Adicione as variáveis de ambiente prefixadas com `VITE_`.
+- O arquivo `vercel.json` já está configurado para o redirecionamento de rotas SPA.

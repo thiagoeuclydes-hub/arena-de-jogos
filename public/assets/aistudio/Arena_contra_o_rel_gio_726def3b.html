@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Arena contra o relógio</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f6f3ff;--ink:#1b1340;--card:#ffffff;--line:#d9d0ff;--a:#5b2bff;--b:#e0236a;--c:#ffc400;--mut:#645c8a;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#150f33;--ink:#f3efff;--card:#221a4d;--line:#3a2f7a;--b:#ff4d8d;--mut:#a79fd6;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#150f33;--ink:#f3efff;--card:#221a4d;--line:#3a2f7a;--b:#ff4d8d;--mut:#a79fd6;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Bricolage Grotesque',system-ui,sans-serif;font-weight:500;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+.wrap{max-width:560px;margin:0 auto;padding:18px 16px 40px}
+h1{font-size:2.4rem;line-height:1.05;font-weight:800;margin:8px 0 10px}
+h2{font-size:1.7rem;font-weight:800;margin:18px 0 6px}
+p{line-height:1.5;margin:6px 0 14px;max-width:60ch}
+.mut{color:var(--mut)}
+.btn{background:var(--a);color:#fff;border:0;border-radius:14px;padding:14px 22px;font:800 1.05rem inherit;font-family:inherit;cursor:pointer}
+.btn:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid var(--c);outline-offset:2px}
+.btn.alt{background:var(--card);color:var(--ink);border:2px solid var(--line)}
+.row{display:flex;gap:8px;margin:14px 0}
+input{flex:1;min-width:0;padding:12px 14px;border-radius:12px;border:2px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-size:1rem}
+ul{list-style:none;padding:0;margin:0 0 18px}
+li{display:flex;justify-content:space-between;padding:10px 14px;background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:6px}
+li button{background:none;border:0;color:var(--b);font-weight:800;cursor:pointer}
+.bar{display:flex;justify-content:space-between;align-items:baseline;gap:10px;border-bottom:3px solid var(--ink);padding-bottom:8px;margin-bottom:14px}
+.bar span{font-weight:800}
+#tm{font-size:2.2rem;font-weight:800;color:var(--b);font-variant-numeric:tabular-nums;min-width:6.5ch;text-align:right}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.card,.num{aspect-ratio:1;border:0;border-radius:12px;background:var(--a);color:#fff;font:800 2rem inherit;font-family:inherit;cursor:pointer}
+.card.up{background:var(--card);color:var(--ink);border:2px solid var(--line)}
+.num{background:var(--card);color:var(--ink);border:2px solid var(--line)}
+.num.sel{background:var(--c);color:#1b1340;border-color:var(--c)}
+.arena{position:relative;height:320px;background:var(--card);border:2px solid var(--line);border-radius:16px;overflow:hidden}
+#cnt{position:absolute;left:12px;top:8px;font-weight:800;color:var(--mut)}
+.tgt{position:absolute;width:56px;height:56px;border-radius:50%;background:var(--b);border:5px solid var(--c);cursor:pointer;padding:0}
+.pads{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pad{height:110px;border:0;border-radius:18px;opacity:.5;cursor:pointer;transition:opacity .1s,transform .1s}
+.pad.on{opacity:1;transform:scale(1.04)}
+canvas{display:block;margin:0 auto;border:2px solid var(--line);border-radius:10px;max-width:100%}
+.dpad{display:grid;grid-template-columns:repeat(3,64px);grid-template-rows:repeat(2,52px);gap:6px;justify-content:center;margin-top:12px}
+.dpad button{border:2px solid var(--line);background:var(--card);color:var(--ink);border-radius:12px;font-size:1.3rem;cursor:pointer}
+.dpad .u{grid-column:2}
+.big{font-size:3rem;font-weight:800;color:var(--b);font-variant-numeric:tabular-nums;margin:4px 0 14px}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:10px 8px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+tr.win td{background:var(--c);color:#1b1340;font-weight:800}
+@media(prefers-reduced-motion:reduce){.pad{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script>
+const $=s=>document.querySelector(s),app=$('#app');
+const sh=a=>{a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a};
+const fmt=ms=>(ms/1000).toFixed(2)+' s';
+let P=[],cur=0,gi=0,R=[],T0=0,iv=null;
+
+const G=[
+ {n:'Memória relâmpago',d:'Vire as cartas e encontre os 6 pares o mais rápido que puder.',f:memoria},
+ {n:'Labirinto',d:'Pegue a chave 🔑 no canto inferior esquerdo e chegue à saída 🚪 no canto superior direito. Use as setas, WASD, deslize na tela ou os botões.',f:labirinto},
+ {n:'Caça ao alvo',d:'Toque nos 10 alvos conforme eles aparecem.',f:alvos},
+ {n:'Siga a sequência',d:'Repita a sequência de cores. Se errar, a rodada recomeça e o tempo continua correndo. São 6 rodadas.',f:genius},
+ {n:'Ordem maluca (vale em dobro)',d:'Toque em dois números para trocá-los de lugar e deixe tudo em ordem, de 1 a 12.',f:ordem}
+];
+
+function setup(){
+ app.innerHTML=`<h1>Arena contra o relógio</h1>
+ <p>Cinco desafios em sequência. Em cada jogo, o menor tempo leva mais pontos (10, 7, 5, 3 e 1). O último jogo vale pontos em dobro.</p>
+ <div class="row"><input id="nm" maxlength="14" placeholder="Nome do jogador" aria-label="Nome do jogador"><button class="btn" id="add">Adicionar</button></div>
+ <ul id="pl"></ul><button class="btn" id="go">Começar</button>`;
+ const draw=()=>{$('#pl').innerHTML=P.map((n,i)=>`<li>${n.replace(/</g,'&lt;')}<button data-i="${i}">Remover</button></li>`).join('');
+  document.querySelectorAll('#pl button').forEach(b=>b.onclick=()=>{P.splice(+b.dataset.i,1);draw()})};
+ const add=()=>{const v=$('#nm').value.trim();if(v&&P.length<12){P.push(v);$('#nm').value='';draw()}$('#nm').focus()};
+ $('#add').onclick=add;$('#nm').onkeydown=e=>{if(e.key==='Enter')add()};
+ $('#go').onclick=()=>{if(!P.length){$('#nm').placeholder='Adicione pelo menos 1 jogador';$('#nm').focus();return}
+  R=P.map(()=>[]);cur=0;gi=0;turno()};
+ draw();
+}
+const bar=()=>`<div class="bar"><span>${P[cur]}</span><span>Jogo ${gi+1} de 5</span><b id="tm">0.00 s</b></div>`;
+function turno(){
+ app.innerHTML=`<h1>Vez de ${P[cur].replace(/</g,'&lt;')}</h1><p>Passe o aparelho para essa pessoa. Quando estiver pronta, comece o primeiro desafio.</p><button class="btn" id="s">Primeiro desafio</button>`;
+ $('#s').onclick=intro;
+}
+function intro(){
+ const g=G[gi];
+ app.innerHTML=`${bar()}<h2>${g.n}</h2><p>${g.d}</p><button class="btn" id="s">Valendo!</button>`;
+ $('#s').onclick=()=>{
+  app.innerHTML=bar()+'<div id="st"></div>';
+  T0=performance.now();iv=setInterval(()=>{const t=$('#tm');if(t)t.textContent=fmt(performance.now()-T0)},50);
+  g.f($('#st'),()=>{clearInterval(iv);const t=performance.now()-T0;R[cur][gi]=t;entre(t)});
+ };
+}
+function entre(t){
+ const last=gi==4;
+ app.innerHTML=`${bar()}<h2>${G[gi].n}</h2><div class="big">${fmt(t)}</div><button class="btn" id="n">${last?(cur<P.length-1?'Próximo jogador':'Ver ranking'):'Próximo desafio'}</button>`;
+ $('#tm').textContent=fmt(t);
+ $('#n').onclick=()=>{if(!last){gi++;intro()}else if(cur<P.length-1){cur++;gi=0;turno()}else final()};
+}
+function final(){
+ const pts=P.map(()=>0),ids=P.map((_,i)=>i);
+ G.forEach((g,k)=>ids.slice().sort((x,y)=>R[x][k]-R[y][k]).forEach((p,pos)=>pts[p]+=([10,7,5,3,1][pos]||1)*(k==4?2:1)));
+ const tot=R.map(r=>r.reduce((a,b)=>a+b,0));
+ const ord=ids.sort((x,y)=>pts[y]-pts[x]||tot[x]-tot[y]);
+ app.innerHTML=`<h1>Ranking final</h1><p>Campeão: <b>${P[ord[0]].replace(/</g,'&lt;')}</b>. Em caso de empate em pontos, vence o menor tempo total.</p>
+ <div class="scroll"><table><tr><th>#</th><th>Jogador</th><th>Pontos</th><th>Tempo total</th><th>Memória</th><th>Labirinto</th><th>Alvos</th><th>Sequência</th><th>Ordem</th></tr>
+ ${ord.map((p,i)=>`<tr class="${i?'':'win'}"><td>${i+1}</td><td>${P[p].replace(/</g,'&lt;')}</td><td>${pts[p]}</td><td>${fmt(tot[p])}</td>${R[p].map(t=>`<td>${fmt(t)}</td>`).join('')}</tr>`).join('')}</table></div>
+ <div class="row"><button class="btn" id="r">Jogar de novo</button><button class="btn alt" id="m">Mudar jogadores</button></div>`;
+ $('#r').onclick=()=>{R=P.map(()=>[]);cur=0;gi=0;turno()};
+ $('#m').onclick=()=>{P=[];setup()};
+}
+
+function memoria(st,done){
+ const E=['🍕','🎧','🚀','🎮','🦊','⚡'],c=sh([...E,...E]);let open=[],lock=0,found=0;
+ st.innerHTML='<div class="grid4"></div>';const gr=st.firstChild;
+ c.forEach(e=>{const b=document.createElement('button');b.className='card';b.setAttribute('aria-label','Carta virada');
+  b.onclick=()=>{if(lock||b.classList.contains('up'))return;b.classList.add('up');b.textContent=e;open.push(b);
+   if(open.length==2){const [x,y]=open;
+    if(x.textContent==y.textContent){open=[];if(++found==6)done()}
+    else{lock=1;setTimeout(()=>{[x,y].forEach(z=>{z.classList.remove('up');z.textContent=''});open=[];lock=0},600)}}};
+  gr.append(b)});
+}
+
+function labirinto(st,done){
+ const N=12,S=2*N+1,g=Array.from({length:S},()=>Array(S).fill(1));
+ (function carve(x,y){g[y][x]=0;for(const [dx,dy] of sh([[2,0],[-2,0],[0,2],[0,-2]])){const nx=x+dx,ny=y+dy;if(nx>0&&ny>0&&nx<S&&ny<S&&g[ny][nx]){g[y+dy/2][x+dx/2]=0;carve(nx,ny)}}})(1,1);
+ const t=Math.min(22,Math.floor((Math.min(innerWidth,560)-36)/S)),cv=document.createElement('canvas');
+ cv.width=cv.height=S*t;cv.style.touchAction='none';
+ st.innerHTML='<p id="msg" class="mut">Pegue a chave 🔑 e chegue à saída 🚪.</p>';st.append(cv);
+ st.insertAdjacentHTML('beforeend','<div class="dpad"><button class="u" aria-label="Cima">▲</button><button aria-label="Esquerda" style="grid-row:2;grid-column:1">◀</button><button aria-label="Baixo" style="grid-row:2;grid-column:2">▼</button><button aria-label="Direita" style="grid-row:2;grid-column:3">▶</button></div>');
+ const cs=getComputedStyle(document.documentElement),x=cv.getContext('2d'),msg=s=>$('#msg').textContent=s;
+ let p={x:1,y:1},hk=0;
+ const draw=()=>{x.fillStyle=cs.getPropertyValue('--card');x.fillRect(0,0,cv.width,cv.height);
+  x.fillStyle=cs.getPropertyValue('--a');for(let j=0;j<S;j++)for(let i=0;i<S;i++)if(g[j][i])x.fillRect(i*t,j*t,t,t);
+  x.font=(t*.85)+'px serif';x.textAlign='center';x.textBaseline='middle';
+  if(!hk)x.fillText('🔑',1.5*t,(S-1.5)*t);x.fillText('🚪',(S-1.5)*t,1.5*t);
+  x.fillStyle=cs.getPropertyValue('--b');x.beginPath();x.arc((p.x+.5)*t,(p.y+.5)*t,t*.36,0,7);x.fill()};
+ const D=[[1,0],[-1,0],[0,1],[0,-1]];
+ const mv=(dx,dy,run)=>{
+  do{const nx=p.x+dx,ny=p.y+dy;if(g[ny][nx])break;p.x=nx;p.y=ny;
+   if(!hk&&p.x==1&&p.y==S-2){hk=1;msg('Chave pega! Agora vá para a saída 🚪')}
+   if(p.x==S-2&&p.y==1){if(hk){off();draw();return done()}msg('A saída está trancada. Pegue a chave 🔑 primeiro.')}
+  }while(run&&D.filter(([a,b])=>!g[p.y+b][p.x+a]).length==2);
+  draw()};
+ const K={ArrowUp:[0,-1],w:[0,-1],ArrowDown:[0,1],s:[0,1],ArrowLeft:[-1,0],a:[-1,0],ArrowRight:[1,0],d:[1,0]};
+ const kd=e=>{const k=K[e.key];if(k){e.preventDefault();mv(k[0],k[1],0)}};
+ const off=()=>removeEventListener('keydown',kd);addEventListener('keydown',kd);
+ const dp=[[0,-1],[-1,0],[0,1],[1,0]];
+ st.querySelectorAll('.dpad button').forEach((b,i)=>b.onclick=()=>mv(dp[i][0],dp[i][1],1));
+ let sx,sy;cv.ontouchstart=e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY};
+ cv.ontouchend=e=>{const dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;if(Math.max(Math.abs(dx),Math.abs(dy))<20)return;
+  Math.abs(dx)>Math.abs(dy)?mv(Math.sign(dx),0,1):mv(0,Math.sign(dy),1)};
+ draw();
+}
+
+function alvos(st,done){
+ let n=0;st.innerHTML='<div class="arena"><span id="cnt">0/10</span></div>';const ar=st.firstChild;
+ const mk=()=>{const b=document.createElement('button');b.className='tgt';b.setAttribute('aria-label','Alvo');
+  b.style.left=Math.random()*(ar.clientWidth-56)+'px';b.style.top=24+Math.random()*(ar.clientHeight-80)+'px';
+  b.onpointerdown=()=>{b.remove();$('#cnt').textContent=(++n)+'/10';n==10?done():mk()};ar.append(b)};
+ mk();
+}
+
+function genius(st,done){
+ const col=['#e0236a','#ffc400','#00a99d','#5b2bff'];let seq=[Math.random()*4|0],step=0,busy=1;
+ st.innerHTML='<p id="msg" class="mut"></p><div class="pads"></div>';
+ const pads=col.map((c,i)=>{const b=document.createElement('button');b.className='pad';b.style.background=c;b.setAttribute('aria-label','Cor '+(i+1));b.onclick=()=>press(i);st.querySelector('.pads').append(b);return b});
+ const flash=i=>{pads[i].classList.add('on');setTimeout(()=>pads[i].classList.remove('on'),320)};
+ const play=()=>{busy=1;step=0;$('#msg').textContent='Observe. Rodada '+seq.length+' de 6.';
+  seq.forEach((v,k)=>setTimeout(()=>flash(v),500+k*600));
+  setTimeout(()=>{busy=0;$('#msg').textContent='Sua vez!'},500+seq.length*600)};
+ const press=i=>{if(busy)return;flash(i);
+  if(i!=seq[step]){busy=1;$('#msg').textContent='Errou! A rodada vai recomeçar.';setTimeout(play,900);return}
+  if(++step==seq.length){busy=1;if(seq.length==6)return done();seq.push(Math.random()*4|0);setTimeout(play,700)}};
+ play();
+}
+
+function ordem(st,done){
+ let a;do a=sh([1,2,3,4,5,6,7,8,9,10,11,12]);while(a.every((v,i)=>v==i+1));let sel=-1;
+ st.innerHTML='<p class="mut">Toque em dois números para trocá-los de lugar.</p><div class="grid4"></div>';const gr=st.lastChild;
+ const r=()=>{gr.innerHTML='';a.forEach((v,i)=>{const b=document.createElement('button');b.className='num'+(i==sel?' sel':'');b.textContent=v;
+  b.onclick=()=>{if(sel<0)sel=i;else{[a[sel],a[i]]=[a[i],a[sel]];sel=-1;if(a.every((v,k)=>v==k+1)){r();return done()}}r()};gr.append(b)})};
+ r();
+}
+setup();
+</script>
+</body>
+</html>
