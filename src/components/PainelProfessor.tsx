@@ -778,7 +778,10 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
       const newState = !currentState;
       const updatedCadeiras = (sala?.cadeiras || []).map((c: any) => ({
         ...c,
-        completedJogadaFinal: newState ? false : c.completedJogadaFinal
+        completedJogadaFinal: newState ? false : c.completedJogadaFinal,
+        jogadaFinalTimeMs: newState ? null : (c.jogadaFinalTimeMs ?? null),
+        jogadaFinalPointsAwarded: newState ? 0 : (c.jogadaFinalPointsAwarded ?? 0),
+        jogadaFinalRank: newState ? null : (c.jogadaFinalRank ?? null)
       }));
       await updateDoc(doc(db as any, 'salas', salaId), {
         jogoJogadaFinalLiberado: newState,
@@ -1500,7 +1503,7 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
                           <span className="text-sm font-black text-purple-300 uppercase tracking-wider">
-                            ⚡ JOGADA FINAL (Arena contra o relógio) &bull; 5 Desafios em Sequência
+                            ⚡ JOGADA FINAL (Por Tempo) &bull; 1º +200 | 2º +100 | 3º +50 | 4º+ +10 pts
                           </span>
                         </div>
                         <button
@@ -1512,8 +1515,37 @@ export const PainelProfessor: React.FC<PainelProfessorProps> = ({ onLogout }) =>
                         </button>
                       </div>
                       <p className="text-xs text-purple-200/80">
-                        Ao liberar, os alunos podem jogar a Jogada Final e garantir pontos na arena.
+                        Pontuação automática pelo melhor tempo nos 5 desafios: <strong className="text-amber-300">1º: +200 pts</strong>, <strong className="text-slate-200">2º: +100 pts</strong>, <strong className="text-orange-300">3º: +50 pts</strong>, <strong className="text-purple-200">4º em diante: +10 pts</strong>.
                       </p>
+                      {(() => {
+                        const jfRanking = (sala.cadeiras || [])
+                          .filter((c: any) => c.completedJogadaFinal && typeof c.jogadaFinalTimeMs === 'number')
+                          .sort((a: any, b: any) => (a.jogadaFinalTimeMs - b.jogadaFinalTimeMs) || (a.id - b.id));
+                        if (jfRanking.length === 0) return null;
+                        return (
+                          <div className="bg-slate-900/90 border border-purple-500/30 rounded-2xl p-3 space-y-1.5">
+                            <span className="block text-[11px] font-black text-amber-400 uppercase tracking-wider">
+                              ⏱️ Ranking por Tempo (Rodada Atual):
+                            </span>
+                            {jfRanking.map((c: any, idx: number) => {
+                              const pts = idx === 0 ? 200 : idx === 1 ? 100 : idx === 2 ? 50 : 10;
+                              return (
+                                <div key={c.id} className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-xl bg-slate-950/80">
+                                  <div className="flex items-center space-x-2 font-bold text-white">
+                                    <span className="text-amber-400 font-black w-6">{idx + 1}º</span>
+                                    <span>{c.avatar || '🦁'}</span>
+                                    <span>{c.nomeAluno || `Cadeira #${c.id}`}</span>
+                                  </div>
+                                  <div className="flex items-center space-x-3 font-mono">
+                                    <span className="text-cyan-300">{(c.jogadaFinalTimeMs / 1000).toFixed(2)} s</span>
+                                    <span className="text-emerald-400 font-black">+{pts} pts</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* JOGO TIRO AO ALVO - PAINEL DO PROFESSOR */}

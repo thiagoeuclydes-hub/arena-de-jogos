@@ -2,11 +2,20 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Trophy, Clock, Zap } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
+export interface JogadaFinalRankItem {
+  id: number;
+  name: string;
+  avatar?: string;
+  timeMs: number;
+  points: number;
+  rank: number;
+}
+
 interface JogadaFinalProps {
   onBack: () => void;
-  onAddScore: (points: number) => void;
-  onCompleteGame: (totalTimeMs: number, calculatedPoints: number) => void;
-  roomPlayers?: { id: number; name: string; timeMs?: number }[];
+  onCompleteGame: (totalTimeMs: number) => void;
+  myChairId?: number | null;
+  roomRanking?: JogadaFinalRankItem[];
 }
 
 const SHUFFLE = (arr: any[]) => {
@@ -22,13 +31,13 @@ const FORMAT_TIME = (ms: number) => (ms / 1000).toFixed(2) + ' s';
 
 export const JogadaFinal: React.FC<JogadaFinalProps> = ({
   onBack,
-  onAddScore,
-  onCompleteGame
+  onCompleteGame,
+  myChairId,
+  roomRanking = []
 }) => {
   const [phase, setPhase] = useState<'intro' | 'playing' | 'challenge_done' | 'final'>('intro');
   const [currentChallengeIndex, setCurrentChallengeIndex] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
-  const [challengeTimes, setChallengeTimes] = useState<number[]>([]);
   const [totalTime, setTotalTime] = useState(0);
 
   const startTimeRef = useRef(0);
@@ -44,7 +53,7 @@ export const JogadaFinal: React.FC<JogadaFinalProps> = ({
 
   const startRun = () => {
     setCurrentChallengeIndex(0);
-    setChallengeTimes([]);
+    setElapsedMs(0);
     setPhase('playing');
     startTimeRef.current = performance.now();
     if (timerRef.current) clearInterval(timerRef.current);
@@ -54,23 +63,16 @@ export const JogadaFinal: React.FC<JogadaFinalProps> = ({
   };
 
   const handleChallengeComplete = () => {
-    const t = performance.now() - startTimeRef.current;
-    const newTimes = [...challengeTimes, t];
-    setChallengeTimes(newTimes);
-
     if (currentChallengeIndex < 4) {
       setCurrentChallengeIndex(prev => prev + 1);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
-      const sumTotal = newTimes.reduce((a, b) => a + b, 0);
-      setTotalTime(sumTotal);
+      const finalTotalTime = Math.max(1, Math.round(performance.now() - startTimeRef.current));
+      setElapsedMs(finalTotalTime);
+      setTotalTime(finalTotalTime);
       setPhase('final');
       confetti({ particleCount: 80, spread: 80, origin: { y: 0.6 } });
-
-      // Award baseline 100 points or call completion
-      const pts = 100;
-      onAddScore(pts);
-      onCompleteGame(sumTotal, pts);
+      onCompleteGame(finalTotalTime);
     }
   };
 
@@ -102,8 +104,14 @@ export const JogadaFinal: React.FC<JogadaFinalProps> = ({
         <div className="space-y-6 py-4">
           <h1 className="text-3xl font-black text-amber-400">⚡ JOGADA FINAL (Arena contra o relógio)</h1>
           <p className="text-sm text-purple-200/90 leading-relaxed">
-            Cinco desafios em sequência contra o relógio! O menor tempo garante a melhor pontuação (de 100 pontos para o primeiro até 10 pontos para o último).
+            Cinco desafios em sequência contra o relógio! A pontuação é definida automaticamente pelo <strong className="text-amber-300">melhor tempo</strong> da sala:
           </p>
+          <div className="grid grid-cols-2 gap-2 text-xs font-black bg-slate-950/90 p-4 rounded-2xl border border-purple-500/40">
+            <div className="p-2.5 rounded-xl bg-amber-400/20 border border-amber-400/50 text-amber-300">🥇 1º Melhor Tempo: +200 pts</div>
+            <div className="p-2.5 rounded-xl bg-slate-300/15 border border-slate-300/40 text-slate-200">🥈 2º Melhor Tempo: +100 pts</div>
+            <div className="p-2.5 rounded-xl bg-orange-500/20 border border-orange-500/40 text-orange-300">🥉 3º Melhor Tempo: +50 pts</div>
+            <div className="p-2.5 rounded-xl bg-purple-500/20 border border-purple-500/40 text-purple-200">⚡ 4º em diante: +10 pts</div>
+          </div>
           <button
             onClick={startRun}
             className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-lg uppercase shadow-xl transition transform hover:scale-102"
@@ -132,25 +140,68 @@ export const JogadaFinal: React.FC<JogadaFinalProps> = ({
         </div>
       )}
 
-      {phase === 'final' && (
-        <div className="space-y-6 py-6">
-          <div className="w-16 h-16 bg-amber-400/20 border-2 border-amber-400 rounded-2xl flex items-center justify-center mx-auto text-3xl">
-            🏆
+      {phase === 'final' && (() => {
+        const myEntry = roomRanking.find(r => r.id === myChairId);
+        return (
+          <div className="space-y-6 py-4">
+            <div className="w-16 h-16 bg-amber-400/20 border-2 border-amber-400 rounded-2xl flex items-center justify-center mx-auto text-3xl">
+              🏆
+            </div>
+            <h2 className="text-2xl font-black text-amber-400">DESAFIOS CONCLUÍDOS!</h2>
+            <div className="bg-slate-950 p-6 rounded-2xl border border-purple-500/40 space-y-2">
+              <span className="text-xs text-purple-300 font-bold block">Tempo Total nos 5 Desafios:</span>
+              <div className="text-4xl font-black text-amber-400 font-mono">{FORMAT_TIME(totalTime)}</div>
+              {myEntry ? (
+                <p className="text-sm text-emerald-400 font-black pt-2">
+                  🏅 Posição Atual: {myEntry.rank}º lugar &bull; +{myEntry.points} pontos!
+                </p>
+              ) : (
+                <p className="text-xs text-cyan-300 font-bold pt-2">Calculando sua posição no ranking por tempo...</p>
+              )}
+              <p className="text-[11px] text-purple-300/70">
+                A pontuação se ajusta em tempo real conforme outros alunos terminam (1º: +200 | 2º: +100 | 3º: +50 | 4º+: +10).
+              </p>
+            </div>
+
+            {roomRanking.length > 0 && (
+              <div className="bg-slate-950/90 p-4 rounded-2xl border border-purple-500/30 text-left space-y-2">
+                <div className="flex items-center space-x-2 text-xs font-black text-amber-400 uppercase">
+                  <Trophy className="w-4 h-4" />
+                  <span>Ranking por Tempo da Sala</span>
+                </div>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {roomRanking.map((item) => {
+                    const isMe = item.id === myChairId;
+                    return (
+                      <div
+                        key={item.id}
+                        className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold ${isMe ? 'bg-amber-400/20 border border-amber-400/50 text-white' : 'bg-slate-900 text-purple-200'}`}
+                      >
+                        <div className="flex items-center space-x-2">
+                          <span className="text-amber-400 font-black w-6">{item.rank}º</span>
+                          <span>{item.avatar || '🦁'}</span>
+                          <span>{item.name} {isMe && <span className="text-amber-300">(Você)</span>}</span>
+                        </div>
+                        <div className="flex items-center space-x-3 font-mono">
+                          <span className="text-cyan-300">{FORMAT_TIME(item.timeMs)}</span>
+                          <span className="text-emerald-400 font-black">+{item.points} pts</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={onBack}
+              className="w-full py-4 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-base uppercase shadow-xl transition"
+            >
+              Voltar para a Arena ➔
+            </button>
           </div>
-          <h2 className="text-2xl font-black text-amber-400">DESAFIOS CONCLUÍDOS!</h2>
-          <div className="bg-slate-950 p-6 rounded-2xl border border-purple-500/40 space-y-2">
-            <span className="text-xs text-purple-300 font-bold block">Tempo Total nos 5 Desafios:</span>
-            <div className="text-4xl font-black text-amber-400 font-mono">{FORMAT_TIME(totalTime)}</div>
-            <p className="text-xs text-emerald-400 font-bold pt-2">🎉 +100 pontos adicionados ao seu placar!</p>
-          </div>
-          <button
-            onClick={onBack}
-            className="w-full py-4 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-base uppercase shadow-xl transition"
-          >
-            Voltar para a Arena ➔
-          </button>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };

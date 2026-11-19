@@ -273,7 +273,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
               setNome(chair.nomeAluno || '');
               setAvatar(chair.avatar || '🦁');
               if (typeof chair.score === 'number') {
-                setScore(prev => Math.max(prev, chair.score));
+                setScore(prev => (chair.score > 0 ? chair.score : prev));
               }
             }
           }
@@ -292,7 +292,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                 setStep('grid');
                 alert('Você foi liberado da cadeira pelo professor.');
               } else if (myChair && typeof myChair.score === 'number') {
-                setScore(prev => Math.max(prev, myChair.score));
+                setScore(prev => (myChair.score > 0 ? myChair.score : prev));
               }
             }
           }
@@ -544,6 +544,59 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
       });
     } catch (err) {
       console.error("Erro ao marcar jogo como concluído:", err);
+    }
+  };
+
+  const getJogadaFinalPointsByRank = (rankIndex: number) => {
+    if (rankIndex === 0) return 200;
+    if (rankIndex === 1) return 100;
+    if (rankIndex === 2) return 50;
+    return 10;
+  };
+
+  const handleCompleteJogadaFinal = async (totalTimeMs: number) => {
+    if (!mySalaId || !myChairId || !db) return;
+    try {
+      let myFinalScore: number | null = null;
+      await runTransaction(db as any, async (transaction: any) => {
+        const salaRef = doc(db as any, 'salas', mySalaId);
+        const salaDoc = await transaction.get(salaRef);
+        if (!salaDoc.exists()) return;
+        const salaData = salaDoc.data();
+        const cadeiras = (salaData.cadeiras || []).map((c: any) => ({ ...c }));
+
+        const myChair = cadeiras.find((c: any) => c.id === myChairId);
+        if (!myChair || myChair.completedJogadaFinal) return;
+
+        myChair.completedJogadaFinal = true;
+        myChair.jogadaFinalTimeMs = Math.max(1, Math.round(totalTimeMs));
+
+        // Ordenar todos os alunos que concluíram a Jogada Final nesta rodada pelo menor tempo
+        const finished = cadeiras
+          .filter((c: any) => c.completedJogadaFinal && typeof c.jogadaFinalTimeMs === 'number')
+          .sort((a: any, b: any) => (a.jogadaFinalTimeMs - b.jogadaFinalTimeMs) || (a.id - b.id));
+
+        finished.forEach((chair: any, idx: number) => {
+          const targetPts = getJogadaFinalPointsByRank(idx);
+          const prevAwarded = typeof chair.jogadaFinalPointsAwarded === 'number' ? chair.jogadaFinalPointsAwarded : 0;
+          const delta = targetPts - prevAwarded;
+          const currentScore = typeof chair.score === 'number' ? chair.score : 0;
+          chair.score = Math.max(0, currentScore + delta);
+          chair.jogadaFinalPointsAwarded = targetPts;
+          chair.jogadaFinalRank = idx + 1;
+          if (chair.id === myChairId) {
+            myFinalScore = chair.score;
+          }
+        });
+
+        transaction.update(salaRef, { cadeiras });
+      });
+
+      if (myFinalScore !== null) {
+        setScore(myFinalScore);
+      }
+    } catch (err) {
+      console.error("Erro ao registrar tempo da Jogada Final:", err);
     }
   };
 
@@ -1238,7 +1291,7 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
                           <div className="flex items-start justify-between">
                             <div>
                               <h4 className="text-lg font-black text-white mb-1">⚡ JOGADA FINAL</h4>
-                              <p className="text-[11px] text-white/90">5 desafios contra o relógio!</p>
+                              <p className="text-[11px] text-white/90">Por tempo: 1º +200 | 2º +100 | 3º +50 | 4º+ +10 pts</p>
                             </div>
                             <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${isCompleted ? 'bg-slate-700 text-slate-300' : isJFUnlocked ? 'bg-emerald-500 text-slate-950' : 'bg-red-600 text-white'}`}>
                               {isCompleted ? 'Concluído ✓' : isJFUnlocked ? '🔓' : '🔒'}
@@ -1825,10 +1878,19 @@ export const ArenaAlunos: React.FC<ArenaAlunosProps> = ({ onBack }) => {
           {step === 'play_jogo_jogada_final' && selectedSala && (
             <JogadaFinal
               onBack={() => setStep('arena_hub')}
-              onAddScore={(pts) => addScorePoints(pts)}
-              onCompleteGame={(_timeMs, calculatedPts) => {
-                markGameCompletedChair('completedJogadaFinal');
-              }}
+              onCompleteGame={(timeMs) => handleCompleteJogadaFinal(timeMs)}
+              myChairId={myChairId}
+              roomRanking={(selectedSala.cadeiras || [])
+                .filter((c: any) => c.completedJogadaFinal && typeof c.jogadaFinalTimeMs === 'number')
+                .sort((a: any, b: any) => (a.jogadaFinalTimeMs - b.jogadaFinalTimeMs) || (a.id - b.id))
+                .map((c: any, idx: number) => ({
+                  id: c.id,
+                  name: c.nomeAluno || `Cadeira #${c.id}`,
+                  avatar: c.avatar,
+                  timeMs: c.jogadaFinalTimeMs,
+                  points: typeof c.jogadaFinalPointsAwarded === 'number' ? c.jogadaFinalPointsAwarded : getJogadaFinalPointsByRank(idx),
+                  rank: idx + 1
+                }))}
             />
           )}
         </>
